@@ -9,12 +9,12 @@ ABOUT:
  */
 
 
-#ifndef __GV_H__
-#define __GV_H__
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#ifndef __GV_H__
+#define __GV_H__
 
 #if !defined(__GNUC__) && !(defined(__llvm__) || defined(__clang__))
 #error "GNU compiler and clang is only supported at the moment"
@@ -24,6 +24,12 @@ extern "C" {
 #define GV_SYS_64BIT
 #elif !defined(GV_SYS_32BIT)
 #define GV_SYS_32BIT
+#endif
+
+#if defined(__llvm__) || defined(__clang__)
+#define gv__pragma(...) _Pragma(#__VA_ARGS__)
+#else
+#define gv__pragma(...)
 #endif
 
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ > 19901L)
@@ -160,7 +166,7 @@ extern "C" {
 #endif
 
 #ifndef gvsock_init
-#define gvsock_init() ({ WSADATA wsa_data; WSAStartup(MAKEWORD(2, 2), &wsa_data); });
+#define gvsock_init() ({ WSADATA wsa_data; WSAStartup(MAKEWORD(2, 2), &wsa_data); })
 #endif
 
 #ifndef gvsock_cleanup
@@ -195,12 +201,26 @@ extern "C" {
 #define gvsock_t SOCKET
 #endif
 
+#ifndef gvthread_start
+#define gvthread_start(func, param) CreateThread(NULL, 0, (DWORD (*)(void*))func, param, 0, NULL)
+#endif
+
+#ifndef gvthread_join
+#define gvthread_join(thread) WaitForSingleObject((thread), INFINITE)
+#endif
+
+#ifndef gvthread_t
+#define gvthread_t HANDLE
+#endif
+
 #else
+
 #include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #ifndef gvdl_open
 #define gvdl_open(lib) dlopen((lib), RTLD_LAZY)
@@ -215,7 +235,7 @@ extern "C" {
 #endif
 
 #ifndef gvsock_init
-#define gvsock_init() ({ WSADATA wsa_data; WSAStartup(MAKEWORD(2, 2), &wsa_data); });
+#define gvsock_init() do {} while(0)
 #endif
 
 #ifndef gvsock_cleanup
@@ -250,12 +270,27 @@ extern "C" {
 #define gvsock_t int
 #endif
 
+#ifndef gvthread_start
+#define gvthread_start(func, param) 															\
+		({																						\
+			pthread_t _th = NULL;																\
+			gv__pragma(clang diagnostic push)													\
+			gv__pragma(clang diagnostic ignored "-Wincompatible-pointer-types")					\
+		 	void (*_func) = (func);																\
+			gv__pragma(clang diagnostic pop)													\
+			pthread_create(&_th, NULL, _func, param); 											\
+		 	_th;																				\
+		})																						
 #endif
 
+#ifndef gvthread_join
+#define gvthread_join(thread) pthread_join((thread), NULL)
+#endif
 
+#ifndef gvthread_t
+#define gvthread_t pthread_t
+#endif
 
-#ifdef __cplusplus
-}
 #endif
 
 #endif
@@ -265,4 +300,9 @@ extern "C" {
  */
 #ifdef GV_IMPLEMENTATION
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
 
