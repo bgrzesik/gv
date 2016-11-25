@@ -213,6 +213,28 @@ extern "C" {
 #define gvthread_t HANDLE
 #endif
 
+extern HANDLE gv__process_heap;
+
+#ifndef gvmem_init
+#define gvmem_init() do { gv__process_heap = GetProcessHeap(); } while(0);
+#endif
+
+#ifndef gvmem_malloc
+#define gvmem_malloc(size) HeapAlloc(GetProcessHeap(), 0, (size))
+#endif
+
+#ifndef gvmem_calloc
+#define gvmem_calloc(size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (size))
+#endif
+
+#ifndef gvmem_realloc
+#define gvmem_realloc(ptr, size) HeapReAlloc(GetProcessHeap(), 0, (ptr), (size))
+#endif
+
+#ifndef gvmem_free
+#define gvmem_free(ptr) HeapFree(GetProcessHeap(), 0, (ptr))
+#endif
+
 #else
 
 #include <dlfcn.h>
@@ -291,6 +313,26 @@ extern "C" {
 #define gvthread_t pthread_t
 #endif
 
+#ifndef gvmem_init
+#define gvmem_init() do { } while(0);
+#endif
+
+#ifndef gvmem_malloc
+#define gvmem_malloc(size) malloc(size)
+#endif
+
+#ifndef gvmem_calloc
+#define gvmem_calloc(size) calloc(size)
+#endif
+
+#ifndef gvmem_realloc
+#define gvmem_realloc(ptr, size) realloc((ptr), (size))
+#endif
+
+#ifndef gvmem_free
+#define gvmem_free(ptr) free(ptr)
+#endif
+
 #endif
 
 #endif
@@ -299,6 +341,9 @@ extern "C" {
 	IMPLEMENTATION
  */
 #ifdef GV_IMPLEMENTATION
+
+HANDLE gv__process_heap = NULL;
+
 #endif
 
 #ifdef __cplusplus
