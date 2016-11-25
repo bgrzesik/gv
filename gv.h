@@ -223,19 +223,19 @@ extern HANDLE gv__process_heap;
 #endif
 
 #ifndef gvmem_malloc
-#define gvmem_malloc(size) HeapAlloc(GetProcessHeap(), 0, (size))
+#define gvmem_malloc(size) HeapAlloc(gv__process_heap, 0, (size))
 #endif
 
 #ifndef gvmem_calloc
-#define gvmem_calloc(size) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (size))
+#define gvmem_calloc(size) HeapAlloc(gv__process_heap, HEAP_ZERO_MEMORY, (size))
 #endif
 
 #ifndef gvmem_realloc
-#define gvmem_realloc(ptr, size) HeapReAlloc(GetProcessHeap(), 0, (ptr), (size))
+#define gvmem_realloc(ptr, size) HeapReAlloc(gv__process_heap, 0, (ptr), (size))
 #endif
 
 #ifndef gvmem_free
-#define gvmem_free(ptr) HeapFree(GetProcessHeap(), 0, (ptr))
+#define gvmem_free(ptr) HeapFree(gv__process_heap, 0, (ptr))
 #endif
 
 #else
