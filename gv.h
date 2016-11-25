@@ -140,7 +140,11 @@ extern "C" {
 #endif
 
 #ifndef GV_STATIC_ASSERT
+#if defined(__has_feature) && __has_feature(c_static_assert)
+#define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__))
+#else
 #define GV_STATIC_ASSERT(...) struct { int: (!!(__VA_ARGS__)); }
+#endif
 #endif
 
 
