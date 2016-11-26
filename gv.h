@@ -566,7 +566,7 @@ GV_INLINE void *gvmem_malloc(gvsize_t size)
 GV_INLINE void *gvmem_calloc(gvsize_t num, gvsize_t size)
 {
 	gvsize_t true_size = num * size;
-	void *ptr = malloc(true_size);
+	void *ptr = gvmem_malloc(true_size);
 	
 	gvmem_memset(ptr, 0, true_size);
 
@@ -639,7 +639,7 @@ GV_INLINE void *gvmem_realloc(void *ptr, gvsize_t size)
 	}
 	
 	gvmem_memcpy(new_ptr, ptr, ptr_block->size);
-	free(ptr);
+	gvmem_free(ptr);
 
 	return new_ptr;
 }
