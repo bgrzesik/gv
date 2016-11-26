@@ -5,6 +5,9 @@
 ABOUT:
 	This is simple utilities for code writing
 
+TODOS
+	TODO Get rid of gv__mem_block->next to gather some memory
+	TODO Benchmark memory functions to see if this was acturally worth it
 
  */
 
@@ -181,7 +184,7 @@ extern "C" {
 #include <windows.h>
 
 #ifndef gvdl_open
-#define gvdl_open(lib) LoadLibrary((lib));
+#define gvdl_open(lib) LoadLibrary((lib))
 #endif
 
 #ifndef gvdl_symbol
@@ -238,6 +241,26 @@ extern "C" {
 
 #ifndef gvthread_t
 #define gvthread_t HANDLE
+#endif
+
+#ifndef gvmutex_init
+#define gvmutex_init(mutex) ({ *(mutex) = CreateMutex(NULL, FALSE, NULL); })
+#endif
+
+#ifndef	gvmutex_destroy
+#define gvmutex_destroy(mutex) CloseHandle((mutex))
+#endif
+
+#ifndef gvmutex_lock
+#define gvmutex_lock(mutex) WaitForSingleObject((mutex), INFINITE)
+#endif
+
+#ifndef gvmutex_unlock
+#define gvmutex_unlock(mutex) ReleaseMutex((mutex))
+#endif
+
+#ifndef gvmutex_t
+#define gvmutex_t HANDLE
 #endif
 
 #else /* _WIN32 */
@@ -318,6 +341,26 @@ extern "C" {
 #define gvthread_t pthread_t
 #endif
 
+#ifndef gvmutex_init
+#define gvmutex_init(mutex) pthread_mutex_init((mutex), NULL)
+#endif
+
+#ifndef	gvmutex_destroy
+#define gvmutex_destroy(mutex) pthread_mutex_destroy((mutex))
+#endif
+
+#ifndef gvmutex_lock
+#define gvmutex_lock(mutex) pthread_mutex_lock((mutex))
+#endif
+
+#ifndef gvmutex_unlock
+#define gvmutex_unlock(mutex) pthread_mutex_unlock((mutex))
+#endif
+
+#ifndef gvmutex_t
+#define gvmutex_t pthread_mutex_t
+#endif
+
 #endif /* _WIN32 */
 
 #ifndef gvmem_memset
@@ -325,9 +368,14 @@ extern "C" {
 #define gvmem_memset(ptr, val, size) memset(ptr, val, size)
 #endif
 
+#ifndef gvmem_memcpy
+#include <string.h>
+#define gvmem_memcpy(dest, src, size) memcpy(dest, src, size)
+#endif
+
 #ifndef gvdebug_log
 #include <stdio.h>
-#define gvdebug_log(...) printf(__VA_ARGS__);
+#define gvdebug_log(...) printf(__VA_ARGS__)
 #endif
 
 extern GV_INLINE void gvmem_init();
@@ -400,6 +448,8 @@ struct gv__mem_block {
 	int free : 1;
 };
 
+gvmutex_t gv__mem_mutex;
+
 struct gv__mem_block *gv__mem_base = NULL;
 
 struct gv__mem_block *gv__mem_find_free(struct gv__mem_block **last, gvsize_t size)
@@ -411,40 +461,30 @@ struct gv__mem_block *gv__mem_find_free(struct gv__mem_block **last, gvsize_t si
 
 	*last = curr;
 	
-	gvdebug_log("[MEM] Looking for free memory\n");
-
 	while (curr) {
 		if (curr->free && !begining) {  /* maybe begining of a free fragmented space */
 			begining = curr;
 			begining_last = *last;
-			space_size = curr->size;
-
-			gvdebug_log("[MEM] Found free block that may become larger\n");
+			space_size = begining->size;
 
 		} else if (curr->free && begining) {
 			space_size += curr->size + sizeof(struct gv__mem_block);	
 
-			gvdebug_log("[MEM] Found next free block that may become a member of bigger block\n");
 
 			if (space_size >= size) { /* found free fragmented space */
 				*last = begining_last;
 				begining->next = curr->next;
 				begining->size = space_size;
-				
-				gvdebug_log("[MEM] Those found block are big enought to become one big block\n");
-				
+
 				return begining;
 			}
 
 
 		} else {
-			gvdebug_log("[MEM] Found non free block - aborting try of bigger block \n");
-
 			begining = NULL;
 		}
 
 		if (curr->free && curr->size >= size) {
-			gvdebug_log("[MEM] Found free block that is big enought for our needs \n");
 			break;
 		}
 
@@ -472,14 +512,13 @@ struct gv__mem_block *gv__mem_req(struct gv__mem_block *last, gvsize_t size)
 	block->size = size;
 	block->next = NULL;
 	block->free = 0;
-
-	gvdebug_log("[MEM] Allocated a new block \n");
 	
 	return block;
 } 
 
 GV_INLINE void gvmem_init()
 {
+	gvmutex_init(&gv__mem_mutex);
 }
 
 GV_INLINE void *gvmem_malloc(gvsize_t size)
@@ -489,41 +528,38 @@ GV_INLINE void *gvmem_malloc(gvsize_t size)
 		return NULL;
 	}
 
-	if (!gv__mem_base) { /* this is first call of malloc */
-		gvdebug_log("[MEM] First call of malloc allocating memory\n");
+	gvmutex_lock(&gv__mem_mutex);
 
+	if (!gv__mem_base) { /* this is first call of malloc */
 		block = gv__mem_req(NULL, size);
 		if (!block) {
 			return NULL;
 		}
 		gv__mem_base = block;
 	} else {
-		gvdebug_log("[MEM] Next call of malloc\n");
-
 		struct gv__mem_block *last = gv__mem_base;
 		block = gv__mem_find_free(&last, size);
 
 		if (!block) {
-			gvdebug_log("[MEM] No suitable block for our needs, allocating a new one\n");
-
 			block = gv__mem_req(last, size);
 			if (!block) {
 				return NULL;
 			}
-		} else if (block->size - size > sizeof(struct gv__mem_block) && last->next == block) {		/* check if block is worth splitting */
-			gvdebug_log("[MEM] Found a memory block that is bigger then we need, splitting it\n");
-
+		} else if (block->size - size > sizeof(struct gv__mem_block)) {		/* check if block is worth splitting */
 			/* this can result into memory fragmentation, so gv__mem_find_free has to be able to join free blocks */
-			struct gv__mem_block *new_block = (struct gv__mem_block *) ((gvintptr_t) (block + 1)) + block->size;
+			struct gv__mem_block *new_block = (struct gv__mem_block *) (((gvintptr_t) (block + 1)) + size);
 			new_block->size = block->size - size - sizeof(struct gv__mem_block);
-			new_block->next = block;
+			new_block->next = block->next;
 			new_block->free = 1;
-			last->next = new_block;
+
+			block->next = new_block;
+			block->size = size;
 		}
 	}
 	block->free = 0;
-	gvdebug_log("[MEM] Returing ready memory block %p\n", block + 1);
-
+	
+	gvmutex_lock(&gv__mem_mutex);
+	
 	return block + 1;
 }
 
@@ -539,7 +575,73 @@ GV_INLINE void *gvmem_calloc(gvsize_t num, gvsize_t size)
 
 GV_INLINE void *gvmem_realloc(void *ptr, gvsize_t size)
 {
-	return NULL;
+	if (!ptr) {
+		return gvmem_malloc(size);
+	}
+
+	struct gv__mem_block *ptr_block = ((struct gv__mem_block *) ptr) - 1;
+
+	gvmutex_lock(&gv__mem_mutex);
+	
+	if (ptr_block->size >= size) {
+		if (ptr_block->size - size > sizeof(struct gv__mem_block)) {		/* if this is block is bigger then we need then we will split it so we can use it later */
+			struct gv__mem_block *new_block = (struct gv__mem_block *) (((gvintptr_t) (ptr_block + 1)) + size);
+			new_block->size = ptr_block->size - size - sizeof(struct gv__mem_block);
+			new_block->next = ptr_block->next;
+			new_block->free = 1;
+			ptr_block->next = new_block;
+			ptr_block->size = size;
+		}
+
+		gvmutex_unlock(&gv__mem_mutex);
+		return ptr;
+	}
+
+	if (ptr_block->size < size) {
+		struct gv__mem_block *curr = ptr_block->next;
+		gvsize_t space_size = 0;
+		while(curr) {
+			if (!curr->free) {
+				break;
+			} else {
+				space_size += curr->size + sizeof(struct gv__mem_block);
+
+				if (ptr_block->size + space_size >= size) {				/* blocks above the ptr's block are free to use and big enough */
+					ptr_block->size += space_size;
+					ptr_block->next = curr->next;
+
+					if (ptr_block->size - size > sizeof(struct gv__mem_block)) {		/* if we made this block too big just split it */	
+						struct gv__mem_block *new_block = (struct gv__mem_block *) (((gvintptr_t) (ptr_block + 1)) + size);
+						new_block->size = ptr_block->size - size - sizeof(struct gv__mem_block);
+						new_block->next = ptr_block->next;
+						new_block->free = 1;
+						ptr_block->next = new_block;
+						ptr_block->size = size;
+					}
+
+					gvmutex_unlock(&gv__mem_mutex);
+					return ptr;
+				}
+			}
+			curr = curr->next;
+		}
+
+	}
+
+	gvmutex_unlock(&gv__mem_mutex);
+	
+	/* this is block is too small and there is no free blocks above this one so move have to just malloc and memcpy */
+	
+	void *new_ptr = gvmem_malloc(size);
+
+	if (!new_ptr) {
+		return NULL;
+	}
+	
+	gvmem_memcpy(new_ptr, ptr, ptr_block->size);
+	free(ptr);
+
+	return new_ptr;
 }
 
 GV_INLINE void gvmem_free(void *ptr)
@@ -547,16 +649,15 @@ GV_INLINE void gvmem_free(void *ptr)
 	if (!ptr) {
 		return;
 	}
+	
+	gvmutex_lock(&gv__mem_mutex);
 
 	struct gv__mem_block *block_ptr = ((struct gv__mem_block *) ptr) - 1;
+
 	GV_ASSERT(block_ptr->free == 0);
 	block_ptr->free = 1;
 
-	gvdebug_log("[MEM] Marked memory block as free to use\n");
-
 	if (block_ptr->next == NULL) {
-		gvdebug_log("[MEM] Freed block is on the top of the heap, decreasing heap size\n");
-
 		struct gv__mem_block *curr = gv__mem_base;
 		struct gv__mem_block *before = NULL;
 		struct gv__mem_block *before_begining = NULL;
@@ -570,15 +671,12 @@ GV_INLINE void gvmem_free(void *ptr)
 			
 			if (curr->next == NULL) {
 				GV_ASSERT(curr == block_ptr);
-				gvdebug_log("[MEM] Deallocating a free blocks on top of the heap\n");
 				
 				if(before_begining) {
 					before_begining->next = NULL;
 				} else {
 					GV_ASSERT(begining == gv__mem_base && curr == block_ptr);
 					gv__mem_base = NULL;
-
-					gvdebug_log("[MEM] All blocks on the heap are marked as free, deallocating whole heap\n");
 				}
 
 				brk(begining);
@@ -591,6 +689,8 @@ GV_INLINE void gvmem_free(void *ptr)
 			curr = curr->next;
 		}
 	}
+
+	gvmutex_unlock(&gv__mem_mutex);
 }
 
 #endif /* _WIN32 */
