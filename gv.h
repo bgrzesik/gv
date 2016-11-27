@@ -19,6 +19,10 @@ extern "C" {
 #ifndef __GV_H__
 #define __GV_H__
 
+
+/*
+   COMPILE TIME
+ */
 #if !defined(__GNUC__) && !(defined(__llvm__) || defined(__clang__))
 #error "GNU compiler and clang is only supported at the moment"
 #endif
@@ -50,6 +54,65 @@ extern "C" {
 #define GV_ASSERT(...) assert(__VA_ARGS__)
 #endif
 
+#ifndef GV_STATIC_ASSERT
+#if defined(__has_feature) && __has_feature(c_static_assert)
+#define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__))
+#else
+#define GV_STATIC_ASSERT(...) struct { int: (!!(__VA_ARGS__)); }
+#endif
+#endif
+
+
+/*
+	MEMORY FUNCTIONS
+ */
+#ifdef _WIN32
+
+#define gvmem_malloc(size)			HeapAlloc(gv__process_heap, 0, size)
+#define gvmem_calloc(num, size)		HeapAlloc(gv__process_heap, HEAP_ZERO_MEMORY, size);
+#define gvmem_realloc(ptr, size) 	HeapReAlloc(gv__process_heap, 0, ptr, size);
+#define gvmem_free(ptr)				HeapFree(gv__process_heap, 0, ptr);
+
+#else	/* _WIN32 */
+
+#include <stdlib.h>
+
+#define gvmem_malloc(size) 			malloc(size)
+#define gvmem_calloc(num, size)		calloc(num, size)
+#define gvmem_realloc(ptr, size)	realloc(ptr, size)
+#define gvmem_free(ptr)				free(ptr)
+
+#endif	/* _WIN32 */
+
+#ifndef gvmem_memset
+#include <string.h>
+#define gvmem_memset(ptr, val, size) memset(ptr, val, size)
+#endif
+
+#ifndef gvmem_memcpy
+#include <string.h>
+#define gvmem_memcpy(dest, src, size) memcpy(dest, src, size)
+#endif
+
+#ifdef GV_USE_MEM_FUNCS
+
+#undef malloc
+#undef calloc
+#undef realloc
+#undef free
+
+/* and hope that it doesn't got reinterpreted on linux */
+#define malloc(size)				gvmem_malloc(size)
+#define calloc(num, size)			gvmem_calloc(num, size)
+#define realloc(ptr, size)			gvmem_realloc(ptr, size)
+#define free(ptr)					gvmem_free(ptr)
+
+#endif /* GV_USE_MEM_FUNCS */ 
+
+
+/*
+   TYPES
+ */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ > 19901L)
 #include <stdint.h>
 
@@ -166,13 +229,6 @@ extern "C" {
 #define gvmax(a, b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); (_a > _b ? _a : _b); })
 #endif
 
-#ifndef GV_STATIC_ASSERT
-#if defined(__has_feature) && __has_feature(c_static_assert)
-#define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__))
-#else
-#define GV_STATIC_ASSERT(...) struct { int: (!!(__VA_ARGS__)); }
-#endif
-#endif
 
 #ifdef _WIN32
 #pragma comment (lib, "Ws2_32.lib")
@@ -363,48 +419,8 @@ extern "C" {
 
 #endif /* _WIN32 */
 
-#ifndef gvmem_memset
-#include <string.h>
-#define gvmem_memset(ptr, val, size) memset(ptr, val, size)
-#endif
-
-#ifndef gvmem_memcpy
-#include <string.h>
-#define gvmem_memcpy(dest, src, size) memcpy(dest, src, size)
-#endif
-
-#ifndef gvdebug_log
-#include <stdio.h>
-#define gvdebug_log(...) printf(__VA_ARGS__)
-#endif
-
-extern GV_INLINE void gvmem_init();
-
-extern GV_INLINE void *gvmem_malloc(gvsize_t size);
-
-extern GV_INLINE void *gvmem_calloc(gvsize_t num, gvsize_t size);
-
-extern GV_INLINE void *gvmem_realloc(void *ptr, gvsize_t size);
-
-extern GV_INLINE void gvmem_free(void *ptr);
-
-
-#ifdef GV_USE_MEM_FUNCS
-
-#undef malloc
-#undef calloc
-#undef realloc
-#undef free
-
-#define malloc(size) gvmem_malloc(size)
-#define calloc(num, size) gvmem_calloc(num, size)
-#define realloc(ptr, size) gvmem_realloc(ptr, size)
-#define free(ptr) gvmem_free(ptr)
-
-#endif /* GV_USE_MEM_FUNCS */ 
-
-
 #endif /* __GV_H__ */
+
 
 /*
 	IMPLEMENTATION
@@ -412,290 +428,11 @@ extern GV_INLINE void gvmem_free(void *ptr);
 #ifdef GV_IMPLEMENTATION
 
 #ifdef _WIN32
-
 HANDLE gv__process_heap = NULL;
-
-GV_INLINE void gvmem_init()
-{
-	gv__process_heap = GetProcessHeap();
-}
-
-GV_INLINE void *gvmem_malloc(gvsize_t size)
-{
-	return HeapAlloc(gv__process_heap, 0, size);
-}
-
-GV_INLINE void *gvmem_calloc(gvsize_t num, gvsize_t size)
-{
-	return HeapAlloc(gv__process_heap, HEAP_ZERO_MEMORY, size);
-}
-
-GV_INLINE void *gvmem_realloc(void *ptr, gvsize_t size)
-{
-	return HeapReAlloc(gv__process_heap, 0, ptr, size);
-}
-
-GV_INLINE void gvmem_free(void *ptr)
-{
-	return HeapFree(gv__process_heap, 0, ptr);
-}
-
-#else /* _WIN32 */
-
-struct gv__mem_block {
-	gvsize_t size;
-	struct gv__mem_block *next;
-	int free : 1;
-};
-
-gvmutex_t gv__mem_mutex;
-
-struct gv__mem_block *gv__mem_base = NULL;
-
-struct gv__mem_block *gv__mem_find_free(struct gv__mem_block **last, gvsize_t size)
-{
-	struct gv__mem_block *curr = gv__mem_base;
-	struct gv__mem_block *begining_last = NULL;
-	struct gv__mem_block *begining = NULL;
-	gvsize_t space_size = 0;
-
-	*last = curr;
-	
-	while (curr) {
-		if (curr->free && !begining) {  /* maybe begining of a free fragmented space */
-			begining = curr;
-			begining_last = *last;
-			space_size = begining->size;
-
-		} else if (curr->free && begining) {
-			space_size += curr->size + sizeof(struct gv__mem_block);	
-
-
-			if (space_size >= size) { /* found free fragmented space */
-				*last = begining_last;
-				begining->next = curr->next;
-				begining->size = space_size;
-
-				return begining;
-			}
-
-
-		} else {
-			begining = NULL;
-		}
-
-		if (curr->free && curr->size >= size) {
-			break;
-		}
-
-		*last = curr;
-		curr = curr->next;
-	}
-
-	return curr;
-}
-
-struct gv__mem_block *gv__mem_req(struct gv__mem_block *last, gvsize_t size)
-{
-	struct gv__mem_block *block = sbrk(0);
-	void *req = sbrk(size + sizeof(struct gv__mem_block));
-	GV_ASSERT((void *) block == req);
-	
-	if (req == (void *) -1) {
-		return NULL;
-	}
-	
-	if (last) {
-		last->next = block;
-	}
-	
-	block->size = size;
-	block->next = NULL;
-	block->free = 0;
-	
-	return block;
-} 
-
-GV_INLINE void gvmem_init()
-{
-	gvmutex_init(&gv__mem_mutex);
-}
-
-GV_INLINE void *gvmem_malloc(gvsize_t size)
-{
-	struct gv__mem_block *block;
-	if (size == 0) {
-		return NULL;
-	}
-
-	gvmutex_lock(&gv__mem_mutex);
-
-	if (!gv__mem_base) { /* this is first call of malloc */
-		block = gv__mem_req(NULL, size);
-		if (!block) {
-			return NULL;
-		}
-		gv__mem_base = block;
-	} else {
-		struct gv__mem_block *last = gv__mem_base;
-		block = gv__mem_find_free(&last, size);
-
-		if (!block) {
-			block = gv__mem_req(last, size);
-			if (!block) {
-				return NULL;
-			}
-		} else if (block->size - size > sizeof(struct gv__mem_block)) {		/* check if block is worth splitting */
-			/* this can result into memory fragmentation, so gv__mem_find_free has to be able to join free blocks */
-			struct gv__mem_block *new_block = (struct gv__mem_block *) (((gvintptr_t) (block + 1)) + size);
-			new_block->size = block->size - size - sizeof(struct gv__mem_block);
-			new_block->next = block->next;
-			new_block->free = 1;
-
-			block->next = new_block;
-			block->size = size;
-		}
-	}
-	block->free = 0;
-	
-	gvmutex_lock(&gv__mem_mutex);
-	
-	return block + 1;
-}
-
-GV_INLINE void *gvmem_calloc(gvsize_t num, gvsize_t size)
-{
-	gvsize_t true_size = num * size;
-	void *ptr = gvmem_malloc(true_size);
-	
-	gvmem_memset(ptr, 0, true_size);
-
-	return ptr;
-}
-
-GV_INLINE void *gvmem_realloc(void *ptr, gvsize_t size)
-{
-	if (!ptr) {
-		return gvmem_malloc(size);
-	}
-
-	struct gv__mem_block *ptr_block = ((struct gv__mem_block *) ptr) - 1;
-
-	gvmutex_lock(&gv__mem_mutex);
-	
-	if (ptr_block->size >= size) {
-		if (ptr_block->size - size > sizeof(struct gv__mem_block)) {		/* if this is block is bigger then we need then we will split it so we can use it later */
-			struct gv__mem_block *new_block = (struct gv__mem_block *) (((gvintptr_t) (ptr_block + 1)) + size);
-			new_block->size = ptr_block->size - size - sizeof(struct gv__mem_block);
-			new_block->next = ptr_block->next;
-			new_block->free = 1;
-			ptr_block->next = new_block;
-			ptr_block->size = size;
-		}
-
-		gvmutex_unlock(&gv__mem_mutex);
-		return ptr;
-	}
-
-	if (ptr_block->size < size) {
-		struct gv__mem_block *curr = ptr_block->next;
-		gvsize_t space_size = 0;
-		while(curr) {
-			if (!curr->free) {
-				break;
-			} else {
-				space_size += curr->size + sizeof(struct gv__mem_block);
-
-				if (ptr_block->size + space_size >= size) {				/* blocks above the ptr's block are free to use and big enough */
-					ptr_block->size += space_size;
-					ptr_block->next = curr->next;
-
-					if (ptr_block->size - size > sizeof(struct gv__mem_block)) {		/* if we made this block too big just split it */	
-						struct gv__mem_block *new_block = (struct gv__mem_block *) (((gvintptr_t) (ptr_block + 1)) + size);
-						new_block->size = ptr_block->size - size - sizeof(struct gv__mem_block);
-						new_block->next = ptr_block->next;
-						new_block->free = 1;
-						ptr_block->next = new_block;
-						ptr_block->size = size;
-					}
-
-					gvmutex_unlock(&gv__mem_mutex);
-					return ptr;
-				}
-			}
-			curr = curr->next;
-		}
-
-	}
-
-	gvmutex_unlock(&gv__mem_mutex);
-	
-	/* this is block is too small and there is no free blocks above this one so move have to just malloc and memcpy */
-	
-	void *new_ptr = gvmem_malloc(size);
-
-	if (!new_ptr) {
-		return NULL;
-	}
-	
-	gvmem_memcpy(new_ptr, ptr, ptr_block->size);
-	gvmem_free(ptr);
-
-	return new_ptr;
-}
-
-GV_INLINE void gvmem_free(void *ptr)
-{
-	if (!ptr) {
-		return;
-	}
-	
-	gvmutex_lock(&gv__mem_mutex);
-
-	struct gv__mem_block *block_ptr = ((struct gv__mem_block *) ptr) - 1;
-
-	GV_ASSERT(block_ptr->free == 0);
-	block_ptr->free = 1;
-
-	if (block_ptr->next == NULL) {
-		struct gv__mem_block *curr = gv__mem_base;
-		struct gv__mem_block *before = NULL;
-		struct gv__mem_block *before_begining = NULL;
-		struct gv__mem_block *begining = NULL;
-		
-		while (curr) {
-			if (curr->free && begining == NULL) { /* maybe a beginging of free space on top of the heap */
-				before_begining = before;
-				begining = curr;
-			}
-			
-			if (curr->next == NULL) {
-				GV_ASSERT(curr == block_ptr);
-				
-				if(before_begining) {
-					before_begining->next = NULL;
-				} else {
-					GV_ASSERT(begining == gv__mem_base && curr == block_ptr);
-					gv__mem_base = NULL;
-				}
-
-				brk(begining);
-				break;
-			} else if (!curr->free) { /* we are not yet on top of the heap */
-				begining = NULL;
-			}
-			
-			before = curr;
-			curr = curr->next;
-		}
-	}
-
-	gvmutex_unlock(&gv__mem_mutex);
-}
-
-#endif /* _WIN32 */
+#endif
 
 #endif /* GV_IMPLEMENTATION */
+
 
 #ifdef __cplusplus
 }
