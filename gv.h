@@ -5,9 +5,10 @@
 ABOUT:
 	This is simple utilities for code writing
 
-TODOS
-	TODO Get rid of gv__mem_block->next to gather some memory
-	TODO Benchmark memory functions to see if this was acturally worth it
+TODOS:
+
+NOTES:
+	- In some macros there are sometimes semi-colons, this is due to some problems of Visual Studio Code. 
 
  */
 
@@ -18,6 +19,27 @@ extern "C" {
 
 #ifndef __GV_H__
 #define __GV_H__
+
+#ifdef _WIN32
+
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Mswsock.lib")
+#pragma comment (lib, "AdvApi32.lib")
+
+#include <WinSock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
+#else /* _WIN32 */
+
+#include <dlfcn.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <pthread.h>
+
+#endif /* _WIN32 */
 
 
 /*
@@ -35,10 +57,30 @@ extern "C" {
 #error "Unknown architecture"
 #endif
 
-#if defined(__llvm__) || defined(__clang__)
-#define gv__pragma(...) _Pragma(#__VA_ARGS__)
+#if (defined(__llvm__) || defined(__clang__) || defined(__GNUC__)) && !defined(GV__PRAGMA)
+#define GV__PRAGMA(...) _Pragma(#__VA_ARGS__) 
+#elif !defined(GV__PRAGMA)
+#define GV__PRAGMA(...)
+#endif
+
+#if (defined(__llvm__) || defined(__clang__)) && !defined(GV__IGN_WARN)
+#define GV__IGN_WARN(warn, ...)						\
+		GV__PRAGMA(clang diagnostic push);			\
+		GV__PRAGMA(clang diagnostic ignored warn);	\
+		__VA_ARGS__									\
+		GV__PRAGMA(clang diagnostic pop);
+#elif defined(__GNUC__) && !defined(GV__IGN_WARN)
+#define GV__IGN_WARN(warn, ...)						\
+		GV__PRAGMA(gcc diagnostic push);			\
+		GV__PRAGMA(gcc diagnostic ignored warn);	\
+		__VA_ARGS__									\
+		GV__PRAGMA(gccclang diagnostic pop);
 #else
-#define gv__pragma(...)
+#define GV__IGN_WARN(warn, ...) __VA_ARGS__
+#endif
+
+#ifndef GV_API
+#define GV_API static
 #endif
 
 #ifndef GV_INLINE
@@ -54,36 +96,30 @@ extern "C" {
 #define GV_ASSERT(...) assert(__VA_ARGS__)
 #endif
 
+#ifndef GV_DEFER
+#define GV_DEFER(...) __VA_ARGS__
+#endif
+
 #ifndef GV_STATIC_ASSERT
-#if defined(__has_feature) && __has_feature(c_static_assert)
+#if defined(__has_feature) && __has_feature(c_static_assert) && false
 #define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__))
 #else
-#define GV_STATIC_ASSERT(...) struct { int: (!!(__VA_ARGS__)); }
+#define GV_STATIC_ASSERT(...) GV__IGN_WARN("-Wmissing-declarations", struct { int: (!!(__VA_ARGS__)); })
+#endif
+#endif
+
+#ifndef GV_DEBUG_BREAK
+#ifdef _WIN32
+#define GV_DEBUG_BREAK() __debugbreak()
+#else
+#define GV_DEBUG_BREAK() asm("int $3")
 #endif
 #endif
 
 
 /*
-	MEMORY FUNCTIONS
+	MEMORY
  */
-#ifdef _WIN32
-
-#define gvmem_malloc(size)			HeapAlloc(gv__process_heap, 0, size)
-#define gvmem_calloc(num, size)		HeapAlloc(gv__process_heap, HEAP_ZERO_MEMORY, size);
-#define gvmem_realloc(ptr, size) 	HeapReAlloc(gv__process_heap, 0, ptr, size);
-#define gvmem_free(ptr)				HeapFree(gv__process_heap, 0, ptr);
-
-#else	/* _WIN32 */
-
-#include <stdlib.h>
-
-#define gvmem_malloc(size) 			malloc(size)
-#define gvmem_calloc(num, size)		calloc(num, size)
-#define gvmem_realloc(ptr, size)	realloc(ptr, size)
-#define gvmem_free(ptr)				free(ptr)
-
-#endif	/* _WIN32 */
-
 #ifndef gvmem_memset
 #include <string.h>
 #define gvmem_memset(ptr, val, size) memset(ptr, val, size)
@@ -95,130 +131,58 @@ extern "C" {
 #endif
 
 #ifdef GV_USE_MEM_FUNCS
+#undef memset
+#undef memcpy
 
-#undef malloc
-#undef calloc
-#undef realloc
-#undef free
-
-/* and hope that it doesn't got reinterpreted on linux */
-#define malloc(size)				gvmem_malloc(size)
-#define calloc(num, size)			gvmem_calloc(num, size)
-#define realloc(ptr, size)			gvmem_realloc(ptr, size)
-#define free(ptr)					gvmem_free(ptr)
-
-#endif /* GV_USE_MEM_FUNCS */ 
+#define memset(ptr, val, size) gvmem_memset(ptr, val, size)
+#define memcpy(dest, src, size) gvmem_memcpy(dest, src, size)
+#endif
 
 
 /*
    TYPES
  */
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ > 19901L)
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ > 199901L)
 #include <stdint.h>
 
-#ifndef gvu8_t
-#define gvu8_t uint8_t
-#endif
-
-#ifndef gvu16_t
-#define gvu16_t uint16_t
-#endif
-
-#ifndef gvu32_t
-#define gvu32_t uint32_t
-#endif
-
-#ifndef gvu64_t
-#define gvu64_t uint64_t
-#endif
-
-#ifndef gvs8_t
-#define gvs8_t int8_t
-#endif
-
-#ifndef gvs16_t
-#define gvs16_t int16_t
-#endif
-
-#ifndef gvs32_t
-#define gvs32_t int32_t
-#endif
-
-#ifndef gvs64_t
-#define gvs64_t int64_t
-#endif
-
-#ifndef gvintptr_t
-#define gvintptr_t intptr_t
-#endif
-
-#ifndef gvptrdiff_t
-#define gvptrdiff_t ptrdiff_t
-#endif
-
-#ifndef gvsize_t
-#define gvsize_t size_t
-#endif
+typedef uint8_t				gvu8_t;
+typedef uint16_t			gvu16_t;
+typedef uint32_t			gvu32_t;
+typedef uint64_t			gvu64_t;
+typedef int8_t				gvs8_t;
+typedef int16_t				gvs16_t;
+typedef int32_t				gvs32_t;
+typedef int64_t				gvs64_t;
+typedef intptr_t			gvintptr_t;
+typedef size_t				gvsize_t;
+typedef _Bool				gvbool_t;
 
 #else /* __STDC_VERSION__ > 19901L */
 
-#ifndef gvu8_t
-#define gvu8_t unsigned char
-#endif
-
-#ifndef gvu16_t
-#define gvu16_t unsigned short
-#endif
-
-#ifndef gvu32_t
-#define gvu32_t unsigned int
-#endif
-
-#ifndef gvu64_t
-#define gvu64_t unsigned long long
-#endif
-
-#ifndef gvs8_t
-#define gvs8_t char
-#endif
-
-#ifndef gvs16_t
-#define gvs16_t short
-#endif
-
-#ifndef gvs32_t
-#define gvs32_t int
-#endif
-
-#ifndef gvs64_t
-#define gvs64_t long long
-#endif
+typedef unsigned char		gvu8_t;
+typedef unsigned short		gvu16_t;
+typedef unsigned int		gvu32_t;
+typedef unsigned long long	gvu64_t;
+typedef char				gvs8_t;
+typedef short				gvs16_t;
+typedef int					gvs32_t;
+typedef long long			gvs64_t;
 
 #ifdef GV_SYS_64BIT
-
-#ifndef gvintptr_t
-#define gvintptr_t gvu64_t 
+typedef gvu64_t 			gvintptr_t;
+#else
+typedef gvu64_t 			gvintptr_t;
 #endif
 
-#ifndef gvptrdiff_t
-#define gvptrdiff_t gvu64_t
-#endif
-
-#else /* GV_SYS_64BIT */
-
-#ifndef gvintptr_t
-#define gvintptr_t gvu32_t
-#endif
-
-#ifndef gvptrdiff_t
-#define gvptrdiff_t gvu32_t
-#endif
-
-#endif /* GV_SYS_64BIT */
-
-#define gvsize_t gvintptr_t
+typedef gvintptr_t			gvsize_t;
+typedef int					gvbool_t;
 
 #endif /* __STDC_VERSION__ > 19901L */
+
+enum {
+	GV_FALSE = 0,
+	GV_TRUE = 1,
+};
 
 
 #ifndef gvmin
@@ -230,196 +194,82 @@ extern "C" {
 #endif
 
 
+/*
+	DYNAMIC LOADING
+ */
+GV_API void *gvdl_open(const char *name);
+GV_API void *gvdl_symbol(void *lib, const char *symbol_name);
+GV_API void  gvdl_close(void *lib);
+
+
+/*
+	SOCKET
+ */
 #ifdef _WIN32
-#pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
-
-#include <WinSock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-
-#ifndef gvdl_open
-#define gvdl_open(lib) LoadLibrary((lib))
-#endif
-
-#ifndef gvdl_symbol
-#define gvdl_symbol(lib, sym) ((void *) GetProcAddress((lib), (sym)))
-#endif
-
-#ifdef gvdl_close
-#define gvdl_close(lib) FreeLibrary((lib))
-#endif
-
-#ifndef gvsock_init
-#define gvsock_init() ({ WSADATA wsa_data; WSAStartup(MAKEWORD(2, 2), &wsa_data); })
-#endif
-
-#ifndef gvsock_cleanup
-#define gvsock_cleanup() WSACleanup()
-#endif
-
-#ifndef gvsock_close
-#define gvsock_close(sock) closesocket(sock) 
-#endif
+typedef SOCKET gvsock_t;
 
 #ifndef GVSOCK_INVALID
 #define GVSOCK_INVALID INVALID_SOCKET
 #endif
 
-#ifndef GVSOCK_ERROR
-#define GVSOCK_ERROR SOCKET_ERROR
-#endif
-
-#ifndef GVSOCK_SD_RECV
-#define GVSOCK_SD_RECV SD_RECEIVE
-#endif
-
-#ifndef GVSOCK_SD_SEND
-#define GVSOCK_SD_SEND SD_SEND
-#endif
-
-#ifndef GVSOCK_SD_BOTH
-#define GVSOCK_SD_BOTH SD_BOTH
-#endif
-
-#ifndef gvsock_t
-#define gvsock_t SOCKET
-#endif
-
-#ifndef gvthread_start
-#define gvthread_start(func, param) CreateThread(NULL, 0, (DWORD (*)(void*))func, param, 0, NULL)
-#endif
-
-#ifndef gvthread_join
-#define gvthread_join(thread) WaitForSingleObject((thread), INFINITE)
-#endif
-
-#ifndef gvthread_t
-#define gvthread_t HANDLE
-#endif
-
-#ifndef gvmutex_init
-#define gvmutex_init(mutex) ({ *(mutex) = CreateMutex(NULL, FALSE, NULL); })
-#endif
-
-#ifndef	gvmutex_destroy
-#define gvmutex_destroy(mutex) CloseHandle((mutex))
-#endif
-
-#ifndef gvmutex_lock
-#define gvmutex_lock(mutex) WaitForSingleObject((mutex), INFINITE)
-#endif
-
-#ifndef gvmutex_unlock
-#define gvmutex_unlock(mutex) ReleaseMutex((mutex))
-#endif
-
-#ifndef gvmutex_t
-#define gvmutex_t HANDLE
-#endif
+enum {
+	GVSOCK_ERROR 	= SOCKET_ERROR,
+	GVSOCK_SD_RECV 	= SD_RECEIVE,
+	GVSOCK_SD_SEND 	= SD_SEND,
+	GVSOCK_SD_BOTH 	= SD_BOTH,
+};
 
 #else /* _WIN32 */
-
-#include <dlfcn.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <pthread.h>
-
-#ifndef gvdl_open
-#define gvdl_open(lib) dlopen((lib), RTLD_LAZY)
-#endif
-
-#ifndef gvdl_symbol
-#define gvdl_symbol(lib, sym) dlsym((lib), (sym))
-#endif
-
-#ifdef gvdl_close
-#define gvdl_close(lib) dlclose((lib))
-#endif
-
-#ifndef gvsock_init
-#define gvsock_init() do {} while(0)
-#endif
-
-#ifndef gvsock_cleanup
-#define gvsock_cleanup() do {} while(0)
-#endif
-
-#ifndef gvsock_close
-#define gvsock_close(sock) close(sock) 
-#endif
+typedef int gvsock_t;
 
 #ifndef GVSOCK_INVALID
 #define GVSOCK_INVALID (-1)
 #endif
 
-#ifndef GVSOCK_ERROR
-#define GVSOCK_ERROR (-1)
-#endif
-
-#ifndef GVSOCK_SD_RECV
-#define GVSOCK_SD_RECV SHUT_RD
-#endif
-
-#ifndef GVSOCK_SD_SEND
-#define GVSOCK_SD_SEND SHUT_WR
-#endif
-
-#ifndef GVSOCK_SD_BOTH
-#define GVSOCK_SD_BOTH SHUT_RDWR
-#endif
-
-#ifndef gvsock_t
-#define gvsock_t int
-#endif
-
-#ifndef gvthread_start
-#define gvthread_start(func, param) 															\
-		({																						\
-			pthread_t _th = NULL;																\
-			gv__pragma(clang diagnostic push)													\
-			gv__pragma(clang diagnostic ignored "-Wincompatible-pointer-types")					\
-		 	void (*_func) = (func);																\
-			gv__pragma(clang diagnostic pop)													\
-			pthread_create(&_th, NULL, _func, param); 											\
-		 	_th;																				\
-		})																						
-#endif
-
-#ifndef gvthread_join
-#define gvthread_join(thread) pthread_join((thread), NULL)
-#endif
-
-#ifndef gvthread_t
-#define gvthread_t pthread_t
-#endif
-
-#ifndef gvmutex_init
-#define gvmutex_init(mutex) pthread_mutex_init((mutex), NULL)
-#endif
-
-#ifndef	gvmutex_destroy
-#define gvmutex_destroy(mutex) pthread_mutex_destroy((mutex))
-#endif
-
-#ifndef gvmutex_lock
-#define gvmutex_lock(mutex) pthread_mutex_lock((mutex))
-#endif
-
-#ifndef gvmutex_unlock
-#define gvmutex_unlock(mutex) pthread_mutex_unlock((mutex))
-#endif
-
-#ifndef gvmutex_t
-#define gvmutex_t pthread_mutex_t
-#endif
-
+enum {
+	GVSOCK_ERROR 	= -1,
+	GVSOCK_SD_RECV	= SHUT_RD,
+	GVSOCK_SD_SEND	= SHUT_WR,
+	GVSOCK_SD_BOTH	= SHUT_RDWR,
+};
 #endif /* _WIN32 */
 
-#endif /* __GV_H__ */
+GV_API void 	gvsock_close(gvsock_t socket);
+GV_API gvbool_t gvsock_init(void);
+GV_API void		gvsock_cleanup(void);
+
+
+/*
+	THREADS
+ */
+#ifdef _WIN32
+typedef HANDLE gvthread_t;
+#else
+typedef pthread_t gvthread_t;
+#endif
+
+typedef void (*gvthread_func_t)(void *);
+
+GV_API gvthread_t	gvthread_start(gvthread_func_t func, void *param);
+GV_API gvbool_t		gvthread_join(gvthread_t thread);
+
+
+/*
+	MUTEX
+ */
+#ifdef _WIN32
+typedef HANDLE gvmutex_t;
+#else
+typedef pthread_mutex_t gvmutex_t;
+#endif
+
+GV_API void		gvmutex_init(gvmutex_t *mutex);
+GV_API void		gvmutex_destroy(gvmutex_t *mutex);
+GV_API void		gvmutex_lock(gvmutex_t *mutex);
+GV_API void		gvmutex_unlock(gvmutex_t *mutex);
+
+
+#endif	/* __GV_H__ */
 
 
 /*
@@ -427,9 +277,174 @@ extern "C" {
  */
 #ifdef GV_IMPLEMENTATION
 
+/*
+	DYNAMIC LOADING IMPLEMENTATION
+ */
 #ifdef _WIN32
-HANDLE gv__process_heap = NULL;
-#endif
+
+GV_API void *gvdl_open(const char *name)
+{
+	return LoadLibrary(name);
+} 
+
+GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
+{
+	return (void *) GetProcAddress(lib, symbol_name);
+}
+
+GV_API void gvdl_close(void *lib)
+{
+	FreeLibrary(lib);
+} 
+
+#else	/* _WIN32 */
+
+GV_API void *gvdl_open(const char *name)
+{
+	return dlopen(name, RTLD_LAZY);
+}
+
+GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
+{
+	return dlsym(lib, symbol_name);
+}
+
+GV_API void gvdl_close(void *lib)
+{
+	return dlclose(lib);
+}
+
+#endif	/* _WIN32 */
+
+/*
+	SOCKET IMPLEMENTATION
+ */
+#ifdef _WIN32
+
+GV_API void gvsock_close(gvsock_t socket)
+{
+	closesocket(socket);
+}
+
+GV_API gvbool_t gvsock_init(void)
+{
+	WSADATA wsa_data; 
+	return WSAStartup(MAKEWORD(2, 2), &wsa_data);
+}
+
+GV_API void gvsock_cleanup(void)
+{
+	WSACleanup();
+}
+
+#else /* _WIN32 */
+
+GV_API void gvsock_close(gvsock_t socket)
+{
+	close(socket);
+}
+
+GV_API gvbool_t gvsock_init(void)
+{
+	return 0;
+}
+
+GV_API void gvsock_cleanup(void)
+{
+}
+
+#endif /* _WIN32 */
+
+/*
+	THREAD IMPLEMENTATION
+ */
+#ifdef _WIN32
+
+GV_API gvthread_t gvthread_start(gvthread_func_t func, void *param)
+{
+	DWORD (*fn)(void*);
+	GV__IGN_WARN("-Wincompatible-pointer-types", {
+		fn = func;
+	});
+	return CreateThread(NULL, 0, fn, param, 0, NULL);
+}
+
+GV_API gvbool_t	gvthread_join(gvthread_t thread)
+{
+	return WaitForSingleObject((thread), INFINITE);
+}
+
+#else	/* _WIN32 */
+
+GV_API gvthread_t gvthread_start(gvthread_func_t func, void *param)
+{
+	pthread_t thread = NULL;
+	void (*fn)(void);
+
+	GV__IGN_WARN("-Wincompatible-pointer-types", {
+		fn = func;
+	});
+
+	pthread_create(&thread, NULL, fn, param);
+	return thread;					
+}
+
+GV_API gvbool_t	gvthread_join(gvthread_t thread)
+{
+	return pthread_join(thread, NULL);
+}
+
+#endif	/* _WIN32 */
+
+/*
+	MUTEX IMPLEMENTATION
+ */
+#ifdef _WIN32
+
+GV_API void gvmutex_init(gvmutex_t *mutex)
+{
+	*mutex = CreateMutex(NULL, FALSE, NULL);
+}
+
+GV_API void gvmutex_destroy(gvmutex_t *mutex)
+{
+	CloseHandle(*mutex);
+}
+
+GV_API void gvmutex_lock(gvmutex_t *mutex)
+{
+	WaitForSingleObject(*mutex, INFINITE);
+}
+
+GV_API void gvmutex_unlock(gvmutex_t *mutex)
+{
+	ReleaseMutex(*mutex);
+}
+
+#else	/* _WIN32 */
+
+GV_API void gvmutex_init(gvmutex_t *mutex)
+{
+	pthread_mutex_init(mutex, NULL);
+}
+
+GV_API void gvmutex_destroy(gvmutex_t mutex)
+{
+	pthread_mutex_destroy(mutex);
+}
+
+GV_API void gvmutex_lock(gvmutex_t mutex)
+{
+	pthread_mutex_lock(mutex);
+}
+
+GV_API void gvmutex_unlock(gvmutex_t mutex)
+{
+	pthread_mutex_unlock(mutex);
+}
+
+#endif	/* _WIN32 */
+
 
 #endif /* GV_IMPLEMENTATION */
 
