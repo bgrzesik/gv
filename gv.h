@@ -372,7 +372,7 @@ GV_API void gvsock_cleanup(void)
  */
 #ifdef _WIN32
 
-GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param);
+GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param)
 {
 	DWORD (*fn)(void*);
 	GV__IGN_WARN("-Wincompatible-pointer-types", {
@@ -391,7 +391,7 @@ GV_API gvbool_t	gvthread_join(gvthread_t thread)
 
 #else	/* _WIN32 */
 
-GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param);
+GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param)
 {
 	void (*fn)(void);
 
