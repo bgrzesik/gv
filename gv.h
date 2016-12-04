@@ -393,7 +393,7 @@ GV_API gvbool_t	gvthread_join(gvthread_t thread)
 
 GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param)
 {
-	void (*fn)(void);
+	void *(*fn)(void*);
 
 	GV__IGN_WARN("-Wincompatible-pointer-types", {
 		fn = func;
