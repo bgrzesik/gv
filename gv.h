@@ -92,11 +92,7 @@ extern "C" {
 #endif
 
 #ifndef GV_ALIGN
-#ifdef _WIN32
-#define GV_ALIGN(x) __declspec(align(x))
-#else
 #define GV_ALIGN(x) __attribute__((aligned(x)))
-#endif
 #endif
 
 #ifndef GV_ASSERT
