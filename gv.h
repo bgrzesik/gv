@@ -91,6 +91,14 @@ extern "C" {
 #define GV_PACKED __attribute__((__packed__))
 #endif
 
+#ifndef GV_ALIGN
+#ifdef _WIN32
+#define GV_ALIGN(x) __declspec(align(x))
+#else
+#define GV_ALIGN(x) __attribute__((aligned(x)))
+#endif
+#endif
+
 #ifndef GV_ASSERT
 #include <assert.h>
 #define GV_ASSERT(...) assert(__VA_ARGS__)
@@ -180,8 +188,8 @@ typedef int					gvbool_t;
 #endif /* __STDC_VERSION__ > 19901L */
 
 enum {
-	GV_FALSE = 0,
-	GV_TRUE = 1,
+	GV_FALSE	= 0,
+	GV_TRUE		= 1,
 };
 
 
@@ -250,7 +258,7 @@ typedef pthread_t gvthread_t;
 
 typedef void (*gvthread_func_t)(void *);
 
-GV_API gvthread_t	gvthread_start(gvthread_func_t func, void *param);
+GV_API gvbool_t		gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param);
 GV_API gvbool_t		gvthread_join(gvthread_t thread);
 
 
@@ -267,6 +275,14 @@ GV_API void		gvmutex_init(gvmutex_t *mutex);
 GV_API void		gvmutex_destroy(gvmutex_t *mutex);
 GV_API void		gvmutex_lock(gvmutex_t *mutex);
 GV_API void		gvmutex_unlock(gvmutex_t *mutex);
+GV_API gvbool_t	gvmutex_trylock(gvmutex_t *mutex);
+
+
+/*
+	ATOMIC
+ */
+GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp);
+GV_API long gvatomic_xchg_add(volatile long *dst, long val);
 
 
 #endif	/* __GV_H__ */
@@ -311,7 +327,7 @@ GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
 
 GV_API void gvdl_close(void *lib)
 {
-	return dlclose(lib);
+	dlclose(lib);
 }
 
 #endif	/* _WIN32 */
@@ -360,13 +376,16 @@ GV_API void gvsock_cleanup(void)
  */
 #ifdef _WIN32
 
-GV_API gvthread_t gvthread_start(gvthread_func_t func, void *param)
+GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param);
 {
 	DWORD (*fn)(void*);
 	GV__IGN_WARN("-Wincompatible-pointer-types", {
 		fn = func;
 	});
-	return CreateThread(NULL, 0, fn, param, 0, NULL);
+
+	*thread = CreateThread(NULL, 0, fn, param, 0, NULL);
+
+	return *thread != NULL;
 }
 
 GV_API gvbool_t	gvthread_join(gvthread_t thread)
@@ -376,17 +395,16 @@ GV_API gvbool_t	gvthread_join(gvthread_t thread)
 
 #else	/* _WIN32 */
 
-GV_API gvthread_t gvthread_start(gvthread_func_t func, void *param)
+GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param);
 {
-	pthread_t thread = NULL;
 	void (*fn)(void);
 
 	GV__IGN_WARN("-Wincompatible-pointer-types", {
 		fn = func;
 	});
 
-	pthread_create(&thread, NULL, fn, param);
-	return thread;					
+	int res = pthread_create(thread, NULL, fn, param);
+	return res == 0;					
 }
 
 GV_API gvbool_t	gvthread_join(gvthread_t thread)
@@ -421,6 +439,11 @@ GV_API void gvmutex_unlock(gvmutex_t *mutex)
 	ReleaseMutex(*mutex);
 }
 
+GV_API gvbool_t	gvmutex_trylock(gvmutex_t *mutex)
+{
+	return WaitForSingleObject(*mutex, 0) == WAIT_OBJECT_0;
+}
+
 #else	/* _WIN32 */
 
 GV_API void gvmutex_init(gvmutex_t *mutex)
@@ -428,19 +451,54 @@ GV_API void gvmutex_init(gvmutex_t *mutex)
 	pthread_mutex_init(mutex, NULL);
 }
 
-GV_API void gvmutex_destroy(gvmutex_t mutex)
+GV_API void gvmutex_destroy(gvmutex_t *mutex)
 {
 	pthread_mutex_destroy(mutex);
 }
 
-GV_API void gvmutex_lock(gvmutex_t mutex)
+GV_API void gvmutex_lock(gvmutex_t *mutex)
 {
 	pthread_mutex_lock(mutex);
 }
 
-GV_API void gvmutex_unlock(gvmutex_t mutex)
+GV_API void gvmutex_unlock(gvmutex_t *mutex)
 {
 	pthread_mutex_unlock(mutex);
+}
+
+GV_API gvbool_t	gvmutex_trylock(gvmutex_t *mutex)
+{
+	return pthread_mutex_unlock(mutex) == 0;
+}
+
+#endif	/* _WIN32 */
+
+
+/*
+	ATOMIC IMPLEMENTATION
+ */
+#ifdef _WIN32
+
+GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
+{
+	return _InterlockedCompareExchange(dst, xchg, cmp);
+}
+
+GV_API long gvatomic_xchg_add(volatile long *dst, long val) 
+{
+	return _InterlockedExchangeAdd (dst, val);
+}
+
+#else	/* _WIN32 */
+
+GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
+{
+	return __sync_val_compare_and_swap(dst, cmp, xchg);
+}
+
+GV_API long gvatomic_xchg_add(volatile long *dst, long val) 
+{
+	return __sync_add_and_fetch (dst, val);
 }
 
 #endif	/* _WIN32 */
