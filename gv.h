@@ -247,15 +247,23 @@ GV_API void		gvsock_cleanup(void);
 	THREADS
  */
 #ifdef _WIN32
-typedef HANDLE gvthread_t;
+typedef HANDLE gvthread_id_t;
 #else
-typedef pthread_t gvthread_t;
+typedef pthread_t gvthread_id_t;
 #endif
 
-typedef void (*gvthread_func_t)(void *);
+typedef void *(*gvthread_func_t)(void *);
 
-GV_API gvbool_t		gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param);
-GV_API gvbool_t		gvthread_join(gvthread_t thread);
+struct gvthread_job {
+	gvthread_id_t 	 thread_id;
+	gvthread_func_t	 func;
+	void 			*param;
+	void			*result;
+	int				 done : 1;
+};
+
+GV_API gvbool_t		gvthread_init(struct gvthread_job *thread, gvthread_func_t func, void *param);
+GV_API gvbool_t		gvthread_join(struct gvthread_job *thread);
 
 
 /*
@@ -372,40 +380,56 @@ GV_API void gvsock_cleanup(void)
  */
 #ifdef _WIN32
 
-GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param)
+static DWORD WINAPI gvthread__func(void *param)
 {
-	DWORD (*fn)(void*);
-	GV__IGN_WARN("-Wincompatible-pointer-types", {
-		fn = func;
-	});
-
-	*thread = CreateThread(NULL, 0, fn, param, 0, NULL);
-
-	return *thread != NULL;
+	struct gvthread_job *j = param;
+	j->result = (*j->func)(j->param);
+	j->done = 1;
+	return !!j->result;
 }
 
-GV_API gvbool_t	gvthread_join(gvthread_t thread)
+GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, void *param)
 {
-	return WaitForSingleObject((thread), INFINITE);
+	job->param = param;
+	job->func = func;
+	job->result = NULL;
+	job->done = 0;
+
+	job->thread_id = CreateThread(NULL, 0, &gvthread__func, job, 0, NULL);
+
+	return job->thread_id;
+}
+
+GV_API gvbool_t	gvthread_join(struct gvthread_job *job)
+{
+	return WaitForSingleObject(job->thread_id, INFINITE);
 }
 
 #else	/* _WIN32 */
 
-GV_API gvbool_t gvthread_init(gvthread_t *thread, gvthread_func_t func, void *param)
+static void *gvthread__func(void *param)
 {
-	void *(*fn)(void*);
+	struct gvthread_job *j = param;
+	j->result = (*j->func)(j->param);
+	j->done = 1;
+	pthread_exit(j->result);
+	return j->result;
+}
 
-	GV__IGN_WARN("-Wincompatible-pointer-types", {
-		fn = func;
-	});
+GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, void *param)
+{
+	job->param = param;
+	job->func = func;
+	job->result = NULL;
+	job->done = 0;
 
-	int res = pthread_create(thread, NULL, fn, param);
+	int res = pthread_create(&job->thread_id, NULL, &gvthread__func, param);
 	return res == 0;					
 }
 
-GV_API gvbool_t	gvthread_join(gvthread_t thread)
+GV_API gvbool_t	gvthread_join(struct gvthread_job *job)
 {
-	return pthread_join(thread, NULL);
+	return pthread_join(job->thread_id, NULL);
 }
 
 #endif	/* _WIN32 */
