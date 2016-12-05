@@ -63,22 +63,6 @@ extern "C" {
 #define GV__PRAGMA(...)
 #endif
 
-#if (defined(__llvm__) || defined(__clang__)) && !defined(GV__IGN_WARN)
-#define GV__IGN_WARN(warn, ...)						\
-		GV__PRAGMA(clang diagnostic push);			\
-		GV__PRAGMA(clang diagnostic ignored warn);	\
-		__VA_ARGS__									\
-		GV__PRAGMA(clang diagnostic pop);
-#elif defined(__GNUC__) && !defined(GV__IGN_WARN)
-#define GV__IGN_WARN(warn, ...)						\
-		GV__PRAGMA(gcc diagnostic push);			\
-		GV__PRAGMA(gcc diagnostic ignored warn);	\
-		__VA_ARGS__									\
-		GV__PRAGMA(gccclang diagnostic pop);
-#else
-#define GV__IGN_WARN(warn, ...) __VA_ARGS__
-#endif
-
 #ifndef GV_API
 #define GV_API static
 #endif
@@ -105,10 +89,14 @@ extern "C" {
 #endif
 
 #ifndef GV_STATIC_ASSERT
-#if defined(__has_feature) && __has_feature(c_static_assert) && false
+#if defined(__has_feature) && __has_feature(c_static_assert)
 #define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__))
 #else
-#define GV_STATIC_ASSERT(...) GV__IGN_WARN("-Wmissing-declarations", struct { int: (!!(__VA_ARGS__)); })
+#define GV_STATIC_ASSERT(...) 											\
+		GV__PRAGMA(clang diagnostic push)								\
+		GV__PRAGMA(clang diagnostic ignored "-Wmissing-declarations")	\
+		struct { int: (!!(__VA_ARGS__)); }								\
+		GV__PRAGMA(clang diagnostic pop)
 #endif
 #endif
 
@@ -187,6 +175,17 @@ enum {
 	GV_FALSE	= 0,
 	GV_TRUE		= 1,
 };
+
+
+GV_STATIC_ASSERT(sizeof(gvu8_t) == 1);
+GV_STATIC_ASSERT(sizeof(gvu16_t) == 2);
+GV_STATIC_ASSERT(sizeof(gvu32_t) == 4);
+GV_STATIC_ASSERT(sizeof(gvu64_t) == 8);
+
+GV_STATIC_ASSERT(sizeof(gvs8_t) == 1);
+GV_STATIC_ASSERT(sizeof(gvs16_t) == 2);
+GV_STATIC_ASSERT(sizeof(gvs32_t) == 4);
+GV_STATIC_ASSERT(sizeof(gvs64_t) == 8);
 
 
 #ifndef gvmin
