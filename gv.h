@@ -6,10 +6,15 @@ ABOUT:
 	This is simple utilities for code writing
 
 TODOS:
+	- TODO add more functions to gv socket.
 
 NOTES:
-	- In some macros there are sometimes semi-colons, this is due to some problems of Visual Studio Code. 
+	In some macros there are sometimes semi-colons (they shouldn't be there), 
+	this is due to some problems of Visual Studio Code.
 
+AUTHOR:
+	Bartłomiej Grzesik
+	
  */
 
 
@@ -27,8 +32,8 @@ extern "C" {
 #pragma comment (lib, "AdvApi32.lib")
 
 #include <WinSock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
+#include <WS2tcpip.h>
+#include <Windows.h>
 
 #else /* _WIN32 */
 
@@ -45,10 +50,6 @@ extern "C" {
 /*
    COMPILE TIME
  */
-#if !defined(__GNUC__) && !(defined(__llvm__) || defined(__clang__))
-#error "GNU compiler and clang is only supported at the moment"
-#endif
-
 #if (defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__)) && !defined(GV_SYS_64BIT)
 #define GV_SYS_64BIT
 #elif !defined(GV_SYS_32BIT)
@@ -58,25 +59,33 @@ extern "C" {
 #endif
 
 #if (defined(__llvm__) || defined(__clang__) || defined(__GNUC__)) && !defined(GV__PRAGMA)
-#define GV__PRAGMA(...) _Pragma(#__VA_ARGS__) 
+#define GV__PRAGMA(...) _Pragma(#__VA_ARGS__)
+#elif defined(_MSC_VER) && !defined(GV__PRAGMA)
+#define GV__PRAGMA(...) __pragma(#__VA_ARGS__)
 #elif !defined(GV__PRAGMA)
 #define GV__PRAGMA(...)
+#endif
+
+#if !defined(_MSC_VER) && !defined(GV__DIAG)
+#ifdef __GNUC__
+#define GV__DIAG(...) GV__PRAGMA(GCC diagnostic __VA_ARGS__)
+#else
+#define GV__DIAG(...) GV__PRAGMA(clang diagnostic __VA_ARGS__)
+#endif
+#elif !defined(GV__DIAG)
+#define GV__DIAG(...)
 #endif
 
 #ifndef GV_API
 #define GV_API static
 #endif
 
-#ifndef GV_INLINE
-#define GV_INLINE inline
-#endif
-
-#ifndef GV_PACKED
-#define GV_PACKED __attribute__((__packed__))
-#endif
-
 #ifndef GV_ALIGN
+#ifdef _MSC_VER
+#define GV_ALIGN(x) __declspec(align(x))
+#else
 #define GV_ALIGN(x) __attribute__((aligned(x)))
+#endif
 #endif
 
 #ifndef GV_ASSERT
@@ -90,13 +99,13 @@ extern "C" {
 
 #ifndef GV_STATIC_ASSERT
 #if defined(__has_feature) && __has_feature(c_static_assert)
-#define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__))
+#define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__), #__VA_ARGS__)
 #else
-#define GV_STATIC_ASSERT(...) 											\
-		GV__PRAGMA(clang diagnostic push)								\
-		GV__PRAGMA(clang diagnostic ignored "-Wmissing-declarations")	\
-		struct { int: (!!(__VA_ARGS__)); }								\
-		GV__PRAGMA(clang diagnostic pop)
+#define GV_STATIC_ASSERT(...) 						\
+		GV__DIAG(push)								\
+		GV__DIAG(ignored "-Wmissing-declarations")	\
+		struct { int: (!!(__VA_ARGS__)); }			\
+		GV__DIAG(pop)
 #endif
 #endif
 
@@ -187,6 +196,17 @@ GV_STATIC_ASSERT(sizeof(gvs16_t) == 2);
 GV_STATIC_ASSERT(sizeof(gvs32_t) == 4);
 GV_STATIC_ASSERT(sizeof(gvs64_t) == 8);
 
+#ifdef _MSC_VER
+
+#ifndef gvmin
+#define gvmin(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef gvmax
+#define gvmax(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+#else /* _MSV_VER */
 
 #ifndef gvmin
 #define gvmin(a, b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); (_a < _b ? _a : _b); })
@@ -196,6 +216,7 @@ GV_STATIC_ASSERT(sizeof(gvs64_t) == 8);
 #define gvmax(a, b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); (_a > _b ? _a : _b); })
 #endif
 
+#endif /* _MSC_VER */
 
 /*
 	DYNAMIC LOADING
@@ -304,7 +325,7 @@ GV_API long gvatomic_xchg_add(volatile long *dst, long val);
 GV_API void *gvdl_open(const char *name)
 {
 	return LoadLibrary(name);
-} 
+}
 
 GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
 {
@@ -314,7 +335,7 @@ GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
 GV_API void gvdl_close(void *lib)
 {
 	FreeLibrary(lib);
-} 
+}
 
 #else	/* _WIN32 */
 
@@ -347,7 +368,7 @@ GV_API void gvsock_close(gvsock_t socket)
 
 GV_API gvbool_t gvsock_init(void)
 {
-	WSADATA wsa_data; 
+	WSADATA wsa_data;
 	return WSAStartup(MAKEWORD(2, 2), &wsa_data);
 }
 
@@ -396,7 +417,7 @@ GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, vo
 
 	job->thread_id = CreateThread(NULL, 0, &gvthread__func, job, 0, NULL);
 
-	return job->thread_id;
+	return !!job->thread_id;
 }
 
 GV_API gvbool_t	gvthread_join(struct gvthread_job *job)
@@ -423,7 +444,7 @@ GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, vo
 	job->done = 0;
 
 	int res = pthread_create(&job->thread_id, NULL, &gvthread__func, param);
-	return res == 0;					
+	return res == 0;
 }
 
 GV_API gvbool_t	gvthread_join(struct gvthread_job *job)
@@ -503,9 +524,9 @@ GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
 	return _InterlockedCompareExchange(dst, xchg, cmp);
 }
 
-GV_API long gvatomic_xchg_add(volatile long *dst, long val) 
+GV_API long gvatomic_xchg_add(volatile long *dst, long val)
 {
-	return _InterlockedExchangeAdd (dst, val);
+	return _InterlockedExchangeAdd(dst, val);
 }
 
 #else	/* _WIN32 */
@@ -515,7 +536,7 @@ GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
 	return __sync_val_compare_and_swap(dst, cmp, xchg);
 }
 
-GV_API long gvatomic_xchg_add(volatile long *dst, long val) 
+GV_API long gvatomic_xchg_add(volatile long *dst, long val)
 {
 	return __sync_add_and_fetch (dst, val);
 }
