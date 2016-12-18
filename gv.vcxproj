@@ -1,0 +1,89 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+    <ItemGroup>
+        <Test Include="tests/test.c"/>
+        <Test Include="tests/simple_http.c"/>
+        <Test Include="tests/simple_hex.c"/>
+        <Test Include="tests/fake_malloc.c"/>
+        <Test Include="tests/fake_memset.c"/>
+        <Test Include="tests/thread_pool.c"/>
+        <Test Include="tests/pre_main.c"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectConfiguration Include="Debug|X64">
+            <Configuration>Debug</Configuration>
+            <Platform>X64</Platform>
+        </ProjectConfiguration>
+        <ProjectConfiguration Include="Release|X64">
+            <Configuration>Release</Configuration>
+            <Platform>X64</Platform>
+        </ProjectConfiguration>
+        <ProjectConfiguration Include="Debug|Win32">
+            <Configuration>Debug</Configuration>
+            <Platform>Win32</Platform>
+        </ProjectConfiguration>
+        <ProjectConfiguration Include="Release|Win32">
+            <Configuration>Release</Configuration>
+            <Platform>Win32</Platform>
+        </ProjectConfiguration>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <ConfigurationType>Application</ConfigurationType>
+        <PlatformToolset>v140</PlatformToolset>
+        <DisabledWarnings>8028,MSB8028</DisabledWarnings>
+        <IntDirSharingDetected>None</IntDirSharingDetected>
+        <BuildInParallel>true</BuildInParallel>
+    </PropertyGroup>
+
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.default.props" />
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Targets"/>
+
+    <Target Name="CompileTests" Inputs="@(Test);gv.h" Outputs="$(OutputPath)%(Test.Filename).exe">
+        <ConvertToAbsolutePath Paths="%(Test.Identity)">
+            <Output TaskParameter="AbsolutePaths" PropertyName="AbsPath"/>
+        </ConvertToAbsolutePath>
+
+         <MakeDir Directories="$(OutputPath)"/>  
+
+        <Exec Condition="'$(Configuration)' == 'Debug'" WorkingDirectory="$(OutputPath)" Command="cl $(AbsPath) /MTd /FC /Zi /I $(MSBuildProjectDirectory)"/>
+        <Exec Condition="'$(Configuration)' == 'Release'" WorkingDirectory="$(OutputPath)" Command="cl $(AbsPath) /I $(MSBuildProjectDirectory)"/>
+    </Target>
+
+    <Target Name="Build" DependsOnTargets="CompileTests">
+    </Target>
+    
+    <Target Name="Rebuild" DependsOnTargets="Clean;Build;GenLaunch">
+    </Target>
+    
+    <Target Name="Clean">
+        <CPPClean FoldersToClean="$(OutputPath)" FilePatternsToDeleteOnClean="*.pdb;*.obj;*.exe;*.log;*.ilk;*.log"/> 
+    </Target>
+
+    <Target Name="GenLaunch">
+        <Delete Files=".vscode/launch.json"/>
+        
+        <WriteLinesToFile File=".vscode/launch.json"
+                          Lines="{
+                            &quot;version&quot;: &quot;0.2.0&quot;,
+                            &quot;configurations&quot;: ["/>
+
+        <WriteLinesToFile File=".vscode/launch.json"
+                          Lines="{
+                &quot;name&quot;: &quot;%(Test.Filename)&quot;,
+                &quot;type&quot;: &quot;cppvsdbg&quot;,
+                &quot;request&quot;: &quot;launch&quot;,
+                &quot;program&quot;: &quot;$(OutputPath.Replace('\', '/'))%(Test.Filename).exe&quot;,
+                &quot;cwd&quot;: &quot;$(OutputPath.Replace('\', '/'))&quot;,
+                &quot;externalConsole&quot;: true,
+                &quot;symbolSearchPath&quot;: &quot;$(OutputPath.Replace('\', '/'))&quot;
+            },"/>
+
+        <WriteLinesToFile File=".vscode/launch.json"
+                          Lines="{ }]}"/>
+        <!-- TODO maybe normalize launch.json -->
+    </Target>
+
+</Project>
