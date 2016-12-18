@@ -132,10 +132,10 @@ extern "C" {
 #endif
 
 #ifndef GV_STATIC_ASSERT
-#define GV_STATIC_ASSERT(...) 						\
-        GV__DIAG(push)								\
-        GV__DIAG(ignored "-Wmissing-declarations")	\
-        struct { int: (!!(__VA_ARGS__)); };			\
+#define GV_STATIC_ASSERT(...)                       \
+        GV__DIAG(push)                              \
+        GV__DIAG(ignored "-Wmissing-declarations")  \
+        struct { int: (!!(__VA_ARGS__)); };         \
         GV__DIAG(pop)
 #endif
 
@@ -154,11 +154,11 @@ extern "C" {
 #define GV__CONSTRUCTOR_PREFIX "_"
 #endif
 #pragma section(".CRT$XCU", read)
-#define GV_CONSTRUCTOR(fn)                                                      \
-    static void fn(void);                                                       \
-    __pragma(section(".CRT$XCU", read))                                       \
-    __declspec(allocate(".CRT$XCU")) void (*fn##_f)(void) = &fn;                \
-    __pragma(comment(linker, "/include:" GV__CONSTRUCTOR_PREFIX #fn "_f"))    \
+#define GV_CONSTRUCTOR(fn)                                                  \
+    static void fn(void);                                                   \
+    __pragma(section(".CRT$XCU", read))                                     \
+    __declspec(allocate(".CRT$XCU")) void (*fn##_f)(void) = &fn;            \
+    __pragma(comment(linker, "/include:" GV__CONSTRUCTOR_PREFIX #fn "_f"))  \
     static void fn(void)
 #elif !defined(GV_CONSTRUCTOR)  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
 #define GV_CONSTRUCTOR(fn) static void fn(void)
@@ -422,7 +422,7 @@ GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_t
 GV_API void gvthread_pool_destroy(struct gvthread_pool *pool);
 
 
-#endif	/* __GV_H__ */
+#endif  /* __GV_H__ */
 
 
 /*
@@ -450,7 +450,7 @@ GV_API void gvdl_close(void *lib)
     FreeLibrary(lib);
 }
 
-#else	/* _WIN32 */
+#else   /* _WIN32 */
 
 GV_API void *gvdl_open(const char *name)
 {
@@ -467,7 +467,7 @@ GV_API void gvdl_close(void *lib)
     dlclose(lib);
 }
 
-#endif	/* _WIN32 */
+#endif  /* _WIN32 */
 
 /*
     SOCKET IMPLEMENTATION
@@ -534,12 +534,12 @@ GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, vo
     return !!job->thread_id;
 }
 
-GV_API gvbool_t	gvthread_join(struct gvthread_job *job)
+GV_API gvbool_t gvthread_join(struct gvthread_job *job)
 {
     return WaitForSingleObject(job->thread_id, INFINITE);
 }
 
-#else	/* _WIN32 */
+#else   /* _WIN32 */
 
 static void *gvthread__func(void *param)
 {
@@ -561,12 +561,12 @@ GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, vo
     return res == 0;
 }
 
-GV_API gvbool_t	gvthread_join(struct gvthread_job *job)
+GV_API gvbool_t gvthread_join(struct gvthread_job *job)
 {
     return pthread_join(job->thread_id, NULL);
 }
 
-#endif	/* _WIN32 */
+#endif  /* _WIN32 */
 
 /*
     MUTEX IMPLEMENTATION
@@ -594,12 +594,12 @@ GV_API void gvmutex_unlock(gvmutex_t *mutex)
     LeaveCriticalSection(mutex);
 }
 
-GV_API gvbool_t	gvmutex_trylock(gvmutex_t *mutex)
+GV_API gvbool_t gvmutex_trylock(gvmutex_t *mutex)
 {
     return TryEnterCriticalSection(mutex);
 }
 
-#else	/* _WIN32 */
+#else   /* _WIN32 */
 
 GV_API void gvmutex_init(gvmutex_t *mutex)
 {
@@ -621,12 +621,12 @@ GV_API void gvmutex_unlock(gvmutex_t *mutex)
     pthread_mutex_unlock(mutex);
 }
 
-GV_API gvbool_t	gvmutex_trylock(gvmutex_t *mutex)
+GV_API gvbool_t gvmutex_trylock(gvmutex_t *mutex)
 {
     return pthread_mutex_unlock(mutex) == 0;
 }
 
-#endif	/* _WIN32 */
+#endif  /* _WIN32 */
 
 
 /*
@@ -649,7 +649,7 @@ GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *con
     return _InterlockedCompareExchangePointer(dst, xchg, cmp);
 }
 
-#else	/* _WIN32 */
+#else   /* _WIN32 */
 
 GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
 {
@@ -666,7 +666,7 @@ GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *con
     return __sync_val_compare_and_swap(dst, cmp, xchg);
 }
 
-#endif	/* _WIN32 */
+#endif  /* _WIN32 */
 
 
 /*
@@ -674,62 +674,62 @@ GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *con
  */
 #ifdef _WIN32
 
-GV_API gvbool_t	gvcondvar_init(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_init(gvcondvar_t *cond)
 {
     InitializeConditionVariable(cond);
     return GV_TRUE;
 }
 
-GV_API gvbool_t	gvcondvar_destroy(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_destroy(gvcondvar_t *cond)
 {
     return GV_TRUE;
 }
 
-GV_API gvbool_t	gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex)
+GV_API gvbool_t gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex)
 {
     return SleepConditionVariableCS(cond, mutex, INFINITE);
 }
 
-GV_API gvbool_t	gvcondvar_notify(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_notify(gvcondvar_t *cond)
 {
     WakeConditionVariable(cond);
     return GV_TRUE;
 }
 
-GV_API gvbool_t	gvcondvar_notify_all(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_notify_all(gvcondvar_t *cond)
 {
     WakeAllConditionVariable(cond);
     return GV_TRUE;
 }
 
-#else	/* _WIN32 */
+#else   /* _WIN32 */
 
-GV_API gvbool_t	gvcondvar_init(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_init(gvcondvar_t *cond)
 {
     return pthread_cond_init(cond, NULL) == 0;
 }
 
-GV_API gvbool_t	gvcondvar_destroy(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_destroy(gvcondvar_t *cond)
 {
     return pthread_cond_destroy(cond) == 0;
 }
 
-GV_API gvbool_t	gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex)
+GV_API gvbool_t gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex)
 {
     return pthread_cond_wait(cond, mutex) == 0;
 }
 
-GV_API gvbool_t	gvcondvar_notify(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_notify(gvcondvar_t *cond)
 {
     return pthread_cond_signal(cond) == 0;
 }
 
-GV_API gvbool_t	gvcondvar_notify_all(gvcondvar_t *cond)
+GV_API gvbool_t gvcondvar_notify_all(gvcondvar_t *cond)
 {
     return pthread_cond_broadcast(cond) == 0;
 }
 
-#endif	/* _WIN32 */
+#endif  /* _WIN32 */
 
 
 /*
