@@ -2,6 +2,7 @@
 #define GV_IMPLEMENTATION
 #include "../gv.h"
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -42,7 +43,7 @@ void *gv_sbrk(gvsize_t size)
 
 static inline gvsize_t gv__word_align(gvsize_t size) 
 {
-	return size + (sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
+	return size + ((sizeof(size_t) - 1) & ~(sizeof(size_t) - 1));
 }
 
 typedef struct gv__chunk {

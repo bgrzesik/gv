@@ -166,7 +166,7 @@ extern "C" {
     __pragma(comment(linker, "/include:" GV__CONSTRUCTOR_PREFIX #fn "_f"))  \
     static void fn(void)
 #elif !defined(GV_CONSTRUCTOR)  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
-#define GV_CONSTRUCTOR(fn) static void fn(void)
+#define GV_CONSTRUCTOR(fn) static void __attribute__ ((unused)) fn(void)
 #endif  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
 
 
@@ -836,7 +836,7 @@ GV_THREAD_FN(gvthread_pool__func, param)
             last_front = pool->front;
             if (last_front) {
                 last_next = last_front->next;
-                task = gvatomic_cmp_xchgv(&pool->front, last_next, last_front);
+                task = gvatomic_cmp_xchgv((void * volatile *) &pool->front, last_next, last_front);
             }
         } while (task != last_front && pool->front != NULL);
 
