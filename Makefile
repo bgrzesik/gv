@@ -12,7 +12,7 @@ TESTS_SRC =               \
 OUTPUT_DIR=./build
 
 CC = gcc
-CFLAGS = -lpthread -pthread -ldl -Wall -I .
+CFLAGS = -ldl -lpthread -pthread -Wall -I . -std=c11
 
 TESTS2 = $(TESTS_SRC:tests/%=%)
 TESTS1 = $(TESTS2:.c=)
@@ -22,7 +22,7 @@ $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
 
 $(TESTS): $(TESTS_SRC) $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) -o $@ tests/$(basename $(notdir $@)).c $(CFLAGS)
 
 build_tests: $(OUTPUT_DIR) $(TESTS)
 

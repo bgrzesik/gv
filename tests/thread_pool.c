@@ -3,20 +3,20 @@
 #include <stdio.h>
 
 #define GV_IMPLEMENTATION
-#include "gv.h"
+#include "../gv.h"
 
 volatile long a = 0;
 
-static void *task_func(void *param) 
+GV_THREAD_FN(task_func, param) 
 {
     gvatomic_xchg_add(&a, 1);
-    return NULL;
+    GV_THREAD_POOL_TASK_RETURN();
 }
 
 int main(int argc, const char **argv)
 {
     struct gvthread_pool pool;
-    struct gvthread_job workers[4];
+    gvthread_t workers[4];
     gvthread_pool_init(&pool, 4, workers);
 
     struct gvthread_task tasks[256];

@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define GV_IMPLEMENTATION
-#include "gv.h"
+#include "../gv.h"
 
 
 int main(int argc, const char **argv)

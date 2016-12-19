@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #define GV_IMPLEMENTATION
-#include "gv.h"
+#include "../gv.h"
 
 GV_CONSTRUCTOR(pre_main) 
 {

@@ -7,6 +7,7 @@ ABOUT:
 
 TODOS:
     - TODO add more functions to gv socket.
+    - TODO consider moving to camel case naming convention.
 
 NOTES:
     In some macros there are sometimes semi-colons (they shouldn't be there),
@@ -93,7 +94,11 @@ extern "C" {
 #endif
 
 #ifndef GV_API
+#ifdef GV_STATIC
 #define GV_API static
+#else
+#define GV_API extern
+#endif
 #endif
 
 #ifndef GV_FORCE_INLINE
@@ -311,23 +316,35 @@ GV_API void      gvsock_cleanup(void);
     THREADS
  */
 #ifdef _WIN32
-typedef HANDLE gvthread_id_t;
-#else
-typedef pthread_t gvthread_id_t;
+
+typedef HANDLE gvthread_t;
+typedef DWORD (*gvthread_fn_t)(void *);
+
+#ifndef GV_THREAD_FN
+#define GV_THREAD_FN(name, param) DWORD WINAPI name(void *param)
 #endif
 
-typedef void *(*gvthread_func_t)(void *);
+#ifndef GV_THREAD_RETURN
+#define GV_THREAD_RETURN() ExitThread(0); return 0;
+#endif
 
-struct gvthread_job {
-    gvthread_id_t    thread_id;
-    gvthread_func_t  func;
-    void            *param;
-    void            *result;
-    int              done : 1;
-};
+#else /* _WIN32 */
 
-GV_API gvbool_t      gvthread_init(struct gvthread_job *thread, gvthread_func_t func, void *param);
-GV_API gvbool_t      gvthread_join(struct gvthread_job *thread);
+typedef pthread_t gvthread_t;
+typedef void *(*gvthread_fn_t)(void *);
+
+#ifndef GV_THREAD_FN
+#define GV_THREAD_FN(name, param) void *name(void *param)
+#endif
+
+#ifndef GV_THREAD_RETURN
+#define GV_THREAD_RETURN() pthread_exit(0); return NULL;
+#endif
+
+#endif
+
+GV_API gvbool_t      gvthread_init(gvthread_t *th, gvthread_fn_t fn, void *param);
+GV_API gvbool_t      gvthread_join(gvthread_t *th);
 
 
 /*
@@ -395,10 +412,9 @@ GV_API gvbool_t  gvevent_destroy(struct gvevent *event);
     THREAD POOL
  */
 struct gvthread_task {
-    void *(*func)(void *);
-    void *param;
-    void *result;
-    struct gvthread_task *next;
+    gvthread_fn_t            fn;
+    void                    *param;
+    struct gvthread_task    *next;
 };
 
 struct gvthread_pool {
@@ -414,11 +430,17 @@ struct gvthread_pool {
 
     struct gvevent ready_done;
 
-    struct gvthread_job *workers;
+    gvthread_t *workers;
 };
 
-GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers, struct gvthread_job *workers);
-GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_task *task, gvthread_func_t func, void *param);
+#if defined(_WIN32) && !defined(GV_THREAD_POOL_TASK_RETURN)
+#define GV_THREAD_POOL_TASK_RETURN() return 0;
+#elif !defined(GV_THREAD_POOL_TASK_RETURN)
+#define GV_THREAD_POOL_TASK_RETURN() return NULL;
+#endif
+
+GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers, gvthread_t *workers);
+GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_task *task, gvthread_fn_t func, void *param);
 GV_API void gvthread_pool_destroy(struct gvthread_pool *pool);
 
 
@@ -513,57 +535,27 @@ GV_API void gvsock_cleanup(void)
  */
 #ifdef _WIN32
 
-static DWORD WINAPI gvthread__func(void *param)
+GV_API gvbool_t gvthread_init(gvthread_t *th, gvthread_fn_t fn, void *param)
 {
-    struct gvthread_job *j = param;
-    j->result = (*j->func)(j->param);
-    j->done = 1;
-    ExitThread(!!j->result);
-    return !!j->result;
+    *th = CreateThread(NULL, 0, fn, param, 0, NULL);
+    return !!th;
 }
 
-GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, void *param)
+GV_API gvbool_t gvthread_join(gvthread_t *th)
 {
-    job->param = param;
-    job->func = func;
-    job->result = NULL;
-    job->done = 0;
-
-    job->thread_id = CreateThread(NULL, 0, &gvthread__func, job, 0, NULL);
-
-    return !!job->thread_id;
-}
-
-GV_API gvbool_t gvthread_join(struct gvthread_job *job)
-{
-    return WaitForSingleObject(job->thread_id, INFINITE);
+    return WaitForSingleObject(*th, INFINITE);
 }
 
 #else   /* _WIN32 */
 
-static void *gvthread__func(void *param)
+GV_API gvbool_t gvthread_init(gvthread_t *th, gvthread_fn_t fn, void *param)
 {
-    struct gvthread_job *j = param;
-    j->result = (*j->func)(j->param);
-    j->done = 1;
-    pthread_exit(j->result);
-    return j->result;
+    return pthread_create(th, NULL, fn, param) == 0;
 }
 
-GV_API gvbool_t gvthread_init(struct gvthread_job *job, gvthread_func_t func, void *param)
+GV_API gvbool_t gvthread_join(gvthread_t *th)
 {
-    job->param = param;
-    job->func = func;
-    job->result = NULL;
-    job->done = 0;
-
-    int res = pthread_create(&job->thread_id, NULL, &gvthread__func, job);
-    return res == 0;
-}
-
-GV_API gvbool_t gvthread_join(struct gvthread_job *job)
-{
-    return pthread_join(job->thread_id, NULL);
+    return pthread_join(*th, NULL);
 }
 
 #endif  /* _WIN32 */
@@ -811,7 +803,7 @@ GV_API gvbool_t  gvevent_destroy(struct gvevent *event)
 /*
     THREAD POOL IMPLEMENTATION
  */
-static void *gvthread_pool__func(void *param)
+GV_THREAD_FN(gvthread_pool__func, param)
 {
     struct gvthread_pool *pool = param;
     struct gvthread_task *task = NULL, *last_front = NULL, *last_next = NULL;
@@ -835,7 +827,7 @@ static void *gvthread_pool__func(void *param)
                     gvevent_notify(&pool->ready_done);
                 }
 
-                return NULL;
+                GV_THREAD_RETURN();
             }
             continue;
         }
@@ -849,15 +841,15 @@ static void *gvthread_pool__func(void *param)
         } while (task != last_front && pool->front != NULL);
 
         if (task) {
-            task->result = (*task->func)(task->param);
+            (*task->fn)(task->param);
         }
     }
 
     GV_ASSERT(GV_FALSE);
-    return NULL;
+    GV_THREAD_RETURN();
 }
 
-GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers, struct gvthread_job *workers)
+GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers, gvthread_t*workers)
 {
     gv_memset(pool, 0, sizeof(*pool)); /* undefined behavior happens without this */
 
@@ -879,12 +871,11 @@ GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers,
     gvevent_wait(&pool->ready_done);
 }
 
-GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_task *task, gvthread_func_t func, void *param)
+GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_task *task, gvthread_fn_t fn, void *param)
 {
-    task->func = func;
+    task->fn = fn;
     task->param = param;
     task->next = NULL;
-    task->result = NULL;
 
     if (pool->front) {
         pool->rear->next = task;
@@ -909,7 +900,7 @@ GV_API void gvthread_pool_destroy(struct gvthread_pool *pool)
     if (pool->num_working > 0) {
         gvevent_wait(&pool->ready_done);
     }
-
+    
     int i;
     for (i = 0; i < pool->num_workers; i++) {
         gvthread_join(&pool->workers[i]);

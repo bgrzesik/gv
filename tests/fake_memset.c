@@ -5,7 +5,7 @@
 #include <time.h>
 
 #define GV_IMPLEMENTATION
-#include "gv.h"
+#include "../gv.h"
 
 #ifdef _WIN32
 #include <intrin.h>
@@ -36,7 +36,13 @@
 //     return ptr;
 // }
 
-static inline void *__cdecl fake_memset(void *ptr, int val, size_t size) 
+#ifdef _MSC_VER
+#define GV_CDECL __cdecl
+#else
+#define GV_CDECL __attribute__((cdecl))
+#endif
+
+static inline void *GV_CDECL fake_memset(void *ptr, int val, size_t size) 
 {
 // 	int cpu[4] = { 0, 0, 0, 0 };
 

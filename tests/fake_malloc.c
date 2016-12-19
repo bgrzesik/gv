@@ -1,6 +1,6 @@
 
 #define GV_IMPLEMENTATION
-#include "gv.h"
+#include "../gv.h"
 
 #include <stdio.h>
 #include <time.h>

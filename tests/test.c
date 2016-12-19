@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <time.h>
 
-#define GV_USE_MEM_FUNCS
+// #define GV_USE_MEM_FUNCS
 #define GV_IMPLEMENTATION
-#include "gv.h"
+#include "../gv.h"
 
 #ifndef _MSC_VER
 #include <x86intrin.h>
