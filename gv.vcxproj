@@ -8,6 +8,7 @@
         <Test Include="tests/fake_memset.c"/>
         <Test Include="tests/thread_pool.c"/>
         <Test Include="tests/pre_main.c"/>
+        <Test Include="tests/http_client.c"/>
     </ItemGroup>
 
     <ItemGroup>

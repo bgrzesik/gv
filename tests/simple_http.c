@@ -8,7 +8,7 @@
 
 int main(int argc, const char **argv)
 {
-    gvsock_init();
+    gvsock_startup();
     
     gvsock_t listen_sock;
     gvsock_t conn_sock;

@@ -308,7 +308,7 @@ enum {
 #endif /* _WIN32 */
 
 GV_API void      gvsock_close(gvsock_t socket);
-GV_API gvbool_t  gvsock_init(void);
+GV_API gvbool_t  gvsock_startup(void);
 GV_API void      gvsock_cleanup(void);
 
 
@@ -501,7 +501,7 @@ GV_API void gvsock_close(gvsock_t socket)
     closesocket(socket);
 }
 
-GV_API gvbool_t gvsock_init(void)
+GV_API gvbool_t gvsock_startup(void)
 {
     WSADATA wsa_data;
     return WSAStartup(MAKEWORD(2, 2), &wsa_data);
@@ -512,6 +512,15 @@ GV_API void gvsock_cleanup(void)
     WSACleanup();
 }
 
+#ifdef GV_SOCK_CONSTRUCTOR
+GV_CONSTRUCTOR(gvsock__sock_constructor)
+{
+    WSADATA wsa_data;
+    WSAStartup(MAKEWORD(2, 2), &wsa_data);
+    atexit(&WSACleanup);
+}
+#endif  /* GV_SOCK_CONSTRUCTOR */
+
 #else /* _WIN32 */
 
 GV_API void gvsock_close(gvsock_t socket)
@@ -519,7 +528,7 @@ GV_API void gvsock_close(gvsock_t socket)
     close(socket);
 }
 
-GV_API gvbool_t gvsock_init(void)
+GV_API gvbool_t gvsock_startup(void)
 {
     return 0;
 }

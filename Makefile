@@ -8,6 +8,7 @@ TESTS_SRC =               \
 	tests/fake_memset.c   \
 	tests/thread_pool.c   \
 	tests/pre_main.c      \
+	tests/http_client.c   \
 
 OUTPUT_DIR=./build
 
