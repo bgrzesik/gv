@@ -1,0 +1,40 @@
+
+[register_compound unit]
+
+struct vec3 {
+    float x;
+    float y;
+    float z;
+};
+
+struct vec2 {
+    float x;
+    float y;
+};
+
+
+entity player {
+    float x;
+    float y;
+    int score;
+};
+
+entity enemy {
+    float x;
+    float y;
+    float health;
+};
+
+entity missle {
+    float x;
+    float y;
+    float dir_x;
+    float dir_y;
+};
+
+entity obstacle {
+    float x;
+    float y;
+    float size_x;
+    float size_y;
+};
