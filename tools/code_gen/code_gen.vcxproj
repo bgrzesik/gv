@@ -1,34 +1,33 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
     <PropertyGroup> 
-        <ThirdParty>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\3rdparty'))</ThirdParty>  
+        <Gv>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))</Gv>  
+        <ThirdParty>$(Gv)\3rdparty</ThirdParty>  
     </PropertyGroup>  
 
     <ItemGroup>
-        <Test Include="tests/test.c"/>
-        <Test Include="tests/simple_http.c"/>
-        <Test Include="tests/simple_hex.c"/>
-        <Test Include="tests/fake_malloc.c"/>
-        <Test Include="tests/fake_memset.c"/>
-        <Test Include="tests/thread_pool.c"/>
-        <Test Include="tests/pre_main.c"/>
-        <Test Include="tests/http_client.c"/>
-        <Test Include="tests/some_shit_test.c"/>
-    </ItemGroup>
-
-    <ItemGroup>
         <ClArg Include="/I $(MSBuildProjectDirectory)"/>
+        <ClArg Include="/I $(Gv)"/>
+
+        <!-- Defines -->
+        <ClArg Include="/D GV_CODE_GEN_IMPLEMENATION"/>
+        <ClArg Include="/D GV_CODE_GEN_MAIN"/>
+        <ClArg Include="/D STB_DEFINE"/>
+        <ClArg Include="/D STB_C_LEXER_IMPLEMENTATION"/>
+        <ClArg Include="/D GV_IMPLEMENTATION"/>
+        
 
         <!-- Includes -->
         <ClArg Include="/I$(ThirdParty)\stb"/>
         <ClArg Include="/I$(ThirdParty)\glfw\include"/>
         <ClArg Include="/I$(ThirdParty)\nuklear"/>
-        <ClArg Include="/I$(ThirdParty)\"/>
+        <ClArg Include="/I$(ThirdParty)"/>
 
         <!-- Libs -->
-        <ClArg Include="$(ThirdParty)\glfw\lib-vc2015\glfw3.lib"/>
+        <ClArg Include="$(ThirdParty)\glfw\lib-vc2015/glfw3.lib"/>
         <ClArg Include="kernel32.lib user32.lib gdi32.lib Shell32.lib winspool.lib comdlg32.lib opengl32.lib Advapi32.lib"/>
     </ItemGroup>
+
 
     <ItemGroup>
         <ClArgDebug Include="/D GV_DEBUG"/>
@@ -70,35 +69,24 @@
     <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
     <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Targets"/>
 
-    <Target Name="CompileTests" Inputs="@(Test);$(MSBuildProjectDirectory)\gv.h" Outputs="$(OutputPath)%(Test.Filename).exe">
-        <ConvertToAbsolutePath Paths="%(Test.Identity)">
+    <Target Name="Compile" Inputs="code_gen.h" Outputs="$(OutputPath)code_gen.exe">
+        <ConvertToAbsolutePath Paths=".\code_gen.h">
             <Output TaskParameter="AbsolutePaths" PropertyName="AbsPath"/>
         </ConvertToAbsolutePath>
 
          <MakeDir Directories="$(OutputPath)"/>  
 
         <Exec Condition="'$(Configuration)' == 'Debug'"
-              WorkingDirectory="$(OutputPath)"
-              Command="cl $(AbsPath) @(ClArg->'%(Identity)', ' ') @(ClArgDebug->'%(Identity)', ' ')"/>
-
-        <Exec Condition="'$(Configuration)' == 'Release'"
-              WorkingDirectory="$(OutputPath)"
-              Command="cl $(AbsPath) @(ClArg->'%(Identity)', ' ') @(ClArgRelease->'%(Identity)', ' ')"/>
-
-    </Target>
-
-
-    <!-- Inputs="$(MSBuildProjectDirectory)\tools\code_gen\code_gen.h;$(MSBuildProjectDirectory)\tools\code_gen\code_gen.vcxproj" -->
-    
-    <Target Name="CodeGen">
-        <MSBuild Projects="$(MSBuildProjectDirectory)\tools\code_gen\code_gen.vcxproj"
-                 Targets="Build"
-                 Properties="Configuration=$(Configuration);Platform=$(Platform)"/>
+              WorkingDirectory="$(OutputPath)" 
+              Command="cl /Tc $(AbsPath) @(ClArg->'%(Identity)', ' ') @(ClArgDebug->'%(Identity)', ' ')"/>
+        
+        <Exec Condition="'$(Configuration)' == 'Release'" 
+              WorkingDirectory="$(OutputPath)" 
+              Command="cl /Tc $(AbsPath) @(ClArg->'%(Identity)', ' ') @(ClArgRelease->'%(Identity)', ' ')"/>
     </Target>
 
     <Target Name="Build">
-        <CallTarget Targets="CodeGen"/>  
-        <CallTarget Targets="CompileTests"/>  
+        <CallTarget Targets="Compile"/>  
     </Target>
     
     <Target Name="Rebuild" DependsOnTargets="Clean;Build;GenLaunch">
@@ -108,44 +96,27 @@
         <CPPClean FoldersToClean="$(OutputPath)" FilePatternsToDeleteOnClean="*.pdb;*.obj;*.exe;*.log;*.ilk;*.log"/> 
     </Target>
 
-    <Target Name="GenLaunch">
-        <PropertyGroup>
-            <LaunchJson Condition="$(LaunchJson) == ''">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\.vscode\launch.json'))</LaunchJson>
-        </PropertyGroup>
-
-        <Delete Files="$(LaunchJson)"/>
-        
-        <WriteLinesToFile File="$(LaunchJson)"
-                          Lines="{
-                            &quot;version&quot;: &quot;0.2.0&quot;,
-                            &quot;configurations&quot;: ["/>
-        
-        <CallTarget Targets="GenConfigurations"/>
-        
-        <MSBuild Projects="$(MSBuildProjectDirectory)\tools\code_gen\code_gen.vcxproj" 
-                 Targets="GenConfigurations" 
-                 Properties="Configuration=$(Configuration);Platform=$(Platform);LaunchJson=$(LaunchJson)"/>
-
-        <WriteLinesToFile File="$(LaunchJson)"
-                          Lines="{ }]}"/>
-    </Target>
-
     <Target Name="GenConfigurations">
         <PropertyGroup>
-            <LaunchJson Condition="$(LaunchJson) == ''"> .vscode\launch.json </LaunchJson>
+            <LaunchJson Condition="$(LaunchJson) == ''"> ..\..\.vscode\launch.json </LaunchJson>
         </PropertyGroup>
-
         <WriteLinesToFile File="$(LaunchJson)"
                           Lines="{
-                &quot;name&quot;: &quot;%(Test.Filename)&quot;,
+                &quot;name&quot;: &quot;code_gen&quot;,
                 &quot;type&quot;: &quot;cppvsdbg&quot;,
                 &quot;request&quot;: &quot;launch&quot;,
-                &quot;program&quot;: &quot;$(OutputPath.Replace('\', '/'))%(Test.Filename).exe&quot;,
+                &quot;program&quot;: &quot;$(OutputPath.Replace('\', '/'))code_gen.exe&quot;,
                 &quot;cwd&quot;: &quot;$(OutputPath.Replace('\', '/'))&quot;,
                 &quot;externalConsole&quot;: true,
+                &quot;symbolSearchPath&quot;: &quot;$(OutputPath.Replace('\', '/'))&quot;,
                 &quot;preLaunchTask&quot;: &quot;Build&quot;,
-                &quot;symbolSearchPath&quot;: &quot;$(OutputPath.Replace('\', '/'))&quot;
+                &quot;args&quot;: [
+                    &quot;-o&quot;,
+                    &quot;$(OutputPath.Replace('\', '/'))/code_gen_test.gen.h&quot;,
+                    &quot;$(MSBuildProjectDirectory.Replace('\', '/'))/code_gen_test.gv&quot;
+                ]
             },"/>
+
     </Target>
 
 </Project>
