@@ -1,5 +1,6 @@
 x64/**
 *.exe
+*.bk
 .vscode/**
-Debug/**
-Release/**
+**/Debug/**
+**/Release/**

@@ -1,5 +1,5 @@
 
-[register_compound unit]
+[register_compound entity]
 
 struct vec3 {
     float x;

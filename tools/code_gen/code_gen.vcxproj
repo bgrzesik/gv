@@ -24,7 +24,9 @@
         <ClArg Include="/I$(ThirdParty)"/>
 
         <!-- Libs -->
-        <ClArg Include="$(ThirdParty)\glfw\lib-vc2015/glfw3.lib"/>
+        <ClArg Condition="$(Platform) == 'X64'" Include="$(ThirdParty)\glfw\lib-vc2015x64\glfw3.lib"/>
+        <ClArg Condition="$(Platform) != 'X64'" Include="$(ThirdParty)\glfw\lib-vc2015x86\glfw3.lib"/>
+        
         <ClArg Include="kernel32.lib user32.lib gdi32.lib Shell32.lib winspool.lib comdlg32.lib opengl32.lib Advapi32.lib"/>
     </ItemGroup>
 

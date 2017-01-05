@@ -416,7 +416,7 @@ static int gv__parse_compound(struct gv_parser_ctx *ctx, stb_lexer *lex, struct 
 
     struct gv_compound *ctx_compound;
     stb_arr_for(ctx_compound, ctx->compounds) {
-        if (strcmp(ctx_compound->name, compound_name)) {
+        if (strcmp(ctx_compound->name, compound_name) == 0) {
             stb_arr_push(ctx_compound->compounds, compound);
             return GV_TRUE;
         }
