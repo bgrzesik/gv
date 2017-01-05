@@ -6,7 +6,6 @@
 
 TODOS:
     - TODO support pointers
-    - TODO support compounds
     - TODO add preprocessor constants
 
  */
@@ -83,6 +82,7 @@ struct gv_parser_ctx {
     int indent;
 
     gv_ast_id_t prefix;
+    gvbool_t unpack;
 };
 
 struct gv_parser_error {
@@ -155,6 +155,7 @@ GV_API void gv_parser_ctx_init(struct gv_parser_ctx *ctx, FILE *out)
     ctx->indent = 0;
     
     ctx->prefix[0] = 0;
+    ctx->unpack = GV_FALSE;
 }
 
 GV_API void gv_parser_ctx_destroy(struct gv_parser_ctx *ctx)
@@ -219,7 +220,7 @@ static int gv__code_gen_member(struct gv_ast_member *member, struct gv_parser_ct
 
         gv_ast_id_t last_prefix;
         stb_strncpy(last_prefix, ctx->prefix, sizeof(last_prefix));
-        stb_snprintf(ctx->prefix, sizeof(ctx->prefix), "%s_%s", member->name, last_prefix);
+        stb_snprintf(ctx->prefix, sizeof(ctx->prefix), "%s%s_", last_prefix, member->name);
 
         fprintf(ctx->out, "%.*sstruct {\n", ctx->indent, GV__SPACES);
         ctx->indent += 4;
@@ -251,7 +252,7 @@ static int gv__code_gen_members(struct gv_ast_container *parent, struct gv_parse
 
 static int gv__code_gen_struct(struct gv_ast_container *ast_struct, struct gv_parser_ctx *ctx, struct gv_parser_error *error)
 {
-    fprintf(ctx->out, "\n%.*sstruct %s {\n", ctx->indent, GV__SPACES, ast_struct->name);
+    fprintf(ctx->out, "%.*sstruct %s {\n", ctx->indent, GV__SPACES, ast_struct->name);
     ctx->indent += 4;
     gv__code_gen_members(ast_struct, ctx, error);
     ctx->indent -= 4;
@@ -353,7 +354,7 @@ static int gv__parse_member(struct gv_ast_container *container, struct gv_parser
             GV__EXPECT_TOKEN(ctx, lex, error, ';');
             break;
     }
-
+    member.unpack = ctx->unpack;
     stb_arr_push(container->members, member);
 
     return GV_TRUE;
@@ -375,7 +376,10 @@ static int gv__parse_members(struct gv_ast_container *container, struct gv_parse
                 status = gv__parse_directive(&domain, &setting, ctx, lex, error);
 
                 if (strcmp(domain, "unpack") == 0) {
-                    stb_fatal("Not yet implemented");
+                    ctx->unpack = GV_TRUE;
+                } else {
+                    stb_snprintf(error->e_desc, sizeof(error->e_desc), "unknown directive '%s'", domain);
+                    return GV_FALSE;
                 }
 
                 stb_c_lexer_get_token(lex);
@@ -387,6 +391,7 @@ static int gv__parse_members(struct gv_ast_container *container, struct gv_parse
         }
 
         status = gv__parse_member(container, ctx, lex, error);
+        ctx->unpack = GV_FALSE;
     }
 
     return GV_TRUE;
@@ -593,7 +598,7 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    fprintf(out, "/* THIS IS GENERETED FILE DO NOT EDIT! */\n");
+    fprintf(out, "/* THIS IS GENERETED FILE DO NOT EDIT! */\n\n");
 
     struct gv_parser_ctx ctx;
     struct gv_parser_error error;

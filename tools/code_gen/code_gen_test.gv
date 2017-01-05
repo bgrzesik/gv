@@ -14,27 +14,27 @@ struct vec2 {
 
 
 entity player {
-    float x;
-    float y;
+    [unpack]
+    vec2 pos;
     int score;
 };
 
 entity enemy {
-    float x;
-    float y;
+    [unpack]
+    vec2 pos;
     float health;
 };
 
 entity missle {
-    float x;
-    float y;
+    [unpack]
+    vec2 pos;
     float dir_x;
     float dir_y;
 };
 
 entity obstacle {
-    float x;
-    float y;
+    [unpack]
+    vec2 pos;
     float size_x;
     float size_y;
 };
