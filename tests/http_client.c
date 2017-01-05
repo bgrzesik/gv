@@ -1,6 +1,7 @@
 
 #include <stdio.h>
-#include <locale.h.>
+#include <locale.h>
+#include <errno.h>
 
 #define GV_SOCK_CONSTRUCTOR
 #define GV_IMPLEMENTATION
