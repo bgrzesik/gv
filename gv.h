@@ -318,7 +318,7 @@ GV_API void      gvsock_cleanup(void);
 #ifdef _WIN32
 
 typedef HANDLE gvthread_t;
-typedef DWORD (*gvthread_fn_t)(void *);
+typedef DWORD (__stdcall *gvthread_fn_t)(void *);
 
 #ifndef GV_THREAD_FN
 #define GV_THREAD_FN(name, param) DWORD WINAPI name(void *param)
@@ -331,10 +331,10 @@ typedef DWORD (*gvthread_fn_t)(void *);
 #else /* _WIN32 */
 
 typedef pthread_t gvthread_t;
-typedef void *(*gvthread_fn_t)(void *);
+typedef DWORD (*gvthread_fn_t)(void *);
 
 #ifndef GV_THREAD_FN
-#define GV_THREAD_FN(name, param) void *name(void *param)
+#define GV_THREAD_FN(name, param) DWORD name(void *param)
 #endif
 
 #ifndef GV_THREAD_RETURN
@@ -517,7 +517,7 @@ GV_CONSTRUCTOR(gvsock__sock_constructor)
 {
     WSADATA wsa_data;
     WSAStartup(MAKEWORD(2, 2), &wsa_data);
-    atexit(&WSACleanup);
+    atexit(&gvsock_cleanup);
 }
 #endif  /* GV_SOCK_CONSTRUCTOR */
 
