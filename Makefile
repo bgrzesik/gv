@@ -9,11 +9,18 @@ TESTS_SRC =               \
 	tests/thread_pool.c   \
 	tests/pre_main.c      \
 	tests/http_client.c   \
+	tests/some_shit_test.c
 
 OUTPUT_DIR=./build
 
 CC = gcc
-CFLAGS = -ldl -lpthread -pthread -Wall -I . -std=c11
+CFLAGS = -ldl -lpthread -pthread -Wall -I . -std=c11 -D_BSD_SOURCE \
+	-lglfw3 -lGL -lX11 -lXxf86vm -lXrandr -lXi -lm -lXcursor -lXinerama               \
+	-isystem .                                                           \
+	-isystem 3rdparty/stb                                                \
+	-isystem 3rdparty/nuklear                                            \
+	-isystem 3rdparty
+
 
 TESTS2 = $(TESTS_SRC:tests/%=%)
 TESTS1 = $(TESTS2:.c=)
