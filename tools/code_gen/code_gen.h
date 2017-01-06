@@ -78,8 +78,10 @@ struct gv_parser_ctx {
     struct gv_ast_container *structs;
 
     /* state */
+    char *in_filepath;
     FILE *out;
     int indent;
+    gvbool_t parse_only;
 
     gv_ast_id_t prefix;
     gvbool_t unpack;
@@ -92,6 +94,7 @@ struct gv_parser_error {
 GV_API void gv_parser_ctx_init(struct gv_parser_ctx *ctx, FILE *out);
 GV_API void gv_parser_ctx_destroy(struct gv_parser_ctx *ctx);
 GV_API int gv_parser_parse_and_gen(struct gv_parser_ctx *ctx, stb_lexer *lexer, struct gv_parser_error *error);
+GV_API int gv_parser_parse_and_gen_file(struct gv_parser_ctx *ctx, char *in, struct gv_parser_error *error);
 
 #endif  /* __CODE_GEN_H__ */
 
@@ -150,10 +153,11 @@ GV_API void gv_parser_ctx_init(struct gv_parser_ctx *ctx, FILE *out)
 {
     ctx->compounds = NULL;
     ctx->structs = NULL;
-
+    ctx->in_filepath = NULL;
     ctx->out = out;
     ctx->indent = 0;
-    
+    ctx->parse_only = GV_FALSE;
+
     ctx->prefix[0] = 0;
     ctx->unpack = GV_FALSE;
 }
@@ -423,6 +427,7 @@ static int gv__parse_compound(struct gv_parser_ctx *ctx, stb_lexer *lex, struct 
     stb_arr_for(ctx_compound, ctx->compounds) {
         if (strcmp(ctx_compound->name, compound_name) == 0) {
             stb_arr_push(ctx_compound->compounds, compound);
+            printf("COMPOUND %s %s\n", ctx_compound->name, compound.name);
             return GV_TRUE;
         }
     }
@@ -453,6 +458,8 @@ static int gv__parse_struct(struct gv_parser_ctx *ctx, stb_lexer *lex, struct gv
     stb_arr_push(ctx->structs, ast_struct);
     gv__code_gen_struct(&ast_struct, ctx, error);
 
+    printf("STRUCT %s\n", ast_struct.name);
+
     return GV_TRUE;
 }
 
@@ -482,6 +489,23 @@ GV_API int gv_parser_parse_and_gen(struct gv_parser_ctx *ctx, stb_lexer *lex, st
                     stb_arr_push(ctx->compounds, compound);
 
                     printf("REGISTERED COMPOUND %s\n", setting);
+                } else if (strcmp(domain, "include") == 0) {
+                    gvbool_t last_parse_only = ctx->parse_only;
+                    char *last_filepath = ctx->in_filepath;
+                    char path[GV__BUFF_SIZE];
+                    char include_file[GV__BUFF_SIZE];
+
+                    stb_splitpath(path, last_filepath, STB_PATH);
+                    stb_snprintf(include_file, sizeof(include_file), "%s%s", path, setting);
+
+                    ctx->parse_only = GV_TRUE;
+                    if (!gv_parser_parse_and_gen_file(ctx, include_file, error)) {
+                        return GV_FALSE;
+                    }
+
+                    ctx->parse_only = last_parse_only;
+                    ctx->in_filepath = last_filepath;
+                    printf("INCLUDE '%s'\n", setting);
                 } else {
                     stb_snprintf(error->e_desc, sizeof(error->e_desc), "unknown directive '%s'", domain);
                     return GV_FALSE;
@@ -495,6 +519,10 @@ GV_API int gv_parser_parse_and_gen(struct gv_parser_ctx *ctx, stb_lexer *lex, st
 
     if (!status) {
         return GV_FALSE;
+    }
+
+    if (ctx->parse_only) {
+        return GV_TRUE;
     }
 
     struct gv_compound *compound;
@@ -554,6 +582,28 @@ GV_API int gv_parser_parse_and_gen(struct gv_parser_ctx *ctx, stb_lexer *lex, st
     return status;
 }
 
+GV_API int gv_parser_parse_and_gen_file(struct gv_parser_ctx *ctx, char *in, struct gv_parser_error *error)
+{
+    gvsize_t file_size;
+    char *file_content;
+    ctx->in_filepath = in;
+    
+    file_content = stb_filec(in, &file_size);
+
+    if (file_content == NULL) {
+        stb_snprintf(error->e_desc, sizeof(error->e_desc), "cannot open file %s\n", in);
+        return GV_FALSE;
+    }
+
+    stb_lexer lex;
+    char store[GV__BUFF_SIZE];
+    stb_c_lexer_init(&lex, file_content, file_content + file_size, store, GV__BUFF_SIZE);
+    
+    int status = gv_parser_parse_and_gen(ctx, &lex, error);
+    free(file_content);
+    return status;
+}
+
 #endif /* GV_CODE_GEN_IMPLEMENATION */
 
 
@@ -598,48 +648,39 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    gv_ast_id_t filename, fileext;
     fprintf(out, "/* THIS IS GENERETED FILE DO NOT EDIT! */\n\n");
+    
+    stb_splitpath(filename, output, STB_FILE);
+    stb_splitpath(fileext, output, STB_EXT);
+    stb_replaceinplace(filename, ".", "_");
 
+    fprintf(out, "\n#ifndef __%s_%s__\n", filename, &fileext[1]);
+    fprintf(out, "#define __%s_%s__\n\n\n", filename, &fileext[1]);
+    
     struct gv_parser_ctx ctx;
     struct gv_parser_error error;
     error.e_desc[0] = 0;
     
     gv_parser_ctx_init(&ctx, out);
 
-    stb_lexer lex;
-    char store[GV__BUFF_SIZE];
-
     char **in;
     stb_arr_for(in, inputs) {
-        gvsize_t file_size;
-        char *file_content;
-        
-        file_content = stb_filec(*in, &file_size);
-
-        if (file_content == NULL) {
-            fclose(out);
-            stb_arr_free(inputs);
-            stb_fatal("cannot open file %s\n", *in);
-            return 3;
-        }
-
-        stb_c_lexer_init(&lex, file_content, file_content + file_size, store, GV__BUFF_SIZE);
-
-        if (!gv_parser_parse_and_gen(&ctx, &lex, &error)) {
+        if (!gv_parser_parse_and_gen_file(&ctx, *in, &error)) {
             char where[GV__SBUFF_SIZE];
             stb_lex_location loc;
             
-            stb_c_lexer_get_location(&lex, where, &loc);
-
             gv_parser_ctx_destroy(&ctx);
             fclose(out);
             stb_arr_free(inputs);
 
-            fprintf(stderr, "error %s(%d, %d): '%s' %s\n", *in, loc.line_number, loc.line_offset, where, error.e_desc);
-            stb_fatal("error %s(%d, %d): '%s' %s\n", *in, loc.line_number, loc.line_offset, where, error.e_desc);
+            fprintf(stderr, "error int '%s': '%s' %s\n", *in, where, error.e_desc);
+            stb_fatal("error int '%s': '%s' %s\n", *in, where, error.e_desc);
             return 3;
         }
     }
+
+    fprintf(out, "#endif  /* __%s_%s__ */\n", filename, &fileext[1]);
 
     gv_parser_ctx_destroy(&ctx);
     fclose(out);
@@ -648,7 +689,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-#endif /* GV_CODE_GEN_MAIN */
+#endif  /* GV_CODE_GEN_MAIN */
 
 #ifdef __cplusplus
 }

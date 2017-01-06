@@ -114,8 +114,8 @@
                 &quot;preLaunchTask&quot;: &quot;Build&quot;,
                 &quot;args&quot;: [
                     &quot;-o&quot;,
-                    &quot;$(OutputPath.Replace('\', '/'))/code_gen_test.gen.h&quot;,
-                    &quot;$(MSBuildProjectDirectory.Replace('\', '/'))/code_gen_test.gv&quot;
+                    &quot;$(OutputPath.Replace('\', '/'))/main.gen.h&quot;,
+                    &quot;$(MSBuildProjectDirectory.Replace('\', '/'))/tests/main.gv&quot;
                 ]
             },"/>
 
