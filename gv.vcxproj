@@ -22,12 +22,17 @@
         <!-- Includes -->
         <ClArg Include="/I$(ThirdParty)\stb"/>
         <ClArg Include="/I$(ThirdParty)\glfw\include"/>
+        <ClArg Include="/I$(ThirdParty)\glew\include"/>
         <ClArg Include="/I$(ThirdParty)\nuklear"/>
         <ClArg Include="/I$(ThirdParty)\"/>
 
         <!-- Libs -->
+        <ClArg Include="/D GLEW_STATIC"/>
         <ClArg Condition="$(Platform) == 'X64'" Include="$(ThirdParty)\glfw\lib-vc2015x64\glfw3.lib"/>
         <ClArg Condition="$(Platform) != 'X64'" Include="$(ThirdParty)\glfw\lib-vc2015x86\glfw3.lib"/>
+
+        <ClArg Condition="$(Platform) == 'X64'" Include="$(ThirdParty)\glew\lib\Release\x64\glew32s.lib"/>
+        <ClArg Condition="$(Platform) != 'X64'" Include="$(ThirdParty)\glew\lib\Release\Win32\glew32s.lib"/>
         
         <ClArg Include="kernel32.lib user32.lib gdi32.lib Shell32.lib winspool.lib comdlg32.lib opengl32.lib Advapi32.lib"/>
     </ItemGroup>
