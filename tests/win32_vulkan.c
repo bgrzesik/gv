@@ -48,8 +48,8 @@ struct gvVkContext {
 };
 
 #ifdef GV_DEBUG
-PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallback;
-PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback;
+PFN_vkCreateDebugReportCallbackEXT fpCreateDebugReportCallback;
+PFN_vkDestroyDebugReportCallbackEXT fpDestroyDebugReportCallback;
 #endif
 
 static VkBool32 VKAPI_PTR debugCallback(VkDebugReportFlagsEXT f, VkDebugReportObjectTypeEXT type, uint64_t obj, size_t loc, int32_t code, const char* prefix, const char* msg, void* ud) {
@@ -100,15 +100,15 @@ void gvVkContextInit(struct gvVkContext *ctx) {
     OutputDebugStringA("Created VkInstance\n");
         
 #ifdef GV_DEBUG
-    vkCreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT) vkGetInstanceProcAddr(ctx->instance, "vkCreateDebugReportCallbackEXT");
-    vkDestroyDebugReportCallback = (PFN_vkDestroyDebugReportCallbackEXT) vkGetInstanceProcAddr(ctx->instance, "vkDestroyDebugReportCallbackEXT");
+    fpCreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT) vkGetInstanceProcAddr(ctx->instance, "vkCreateDebugReportCallbackEXT");
+    fpDestroyDebugReportCallback = (PFN_vkDestroyDebugReportCallbackEXT) vkGetInstanceProcAddr(ctx->instance, "vkDestroyDebugReportCallbackEXT");
 
     VkDebugReportCallbackCreateInfoEXT debug_report_ci = {0};
     debug_report_ci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
     debug_report_ci.flags = VK_DEBUG_REPORT_FLAG_BITS_MAX_ENUM_EXT;
     debug_report_ci.pfnCallback = &debugCallback;
 
-    VK_CHECK(vkCreateDebugReportCallback(ctx->instance, &debug_report_ci, NULL, &ctx->debug_cb));
+    VK_CHECK(fpCreateDebugReportCallback(ctx->instance, &debug_report_ci, NULL, &ctx->debug_cb));
 #endif
 
     VkPhysicalDevice devices[16];
@@ -205,15 +205,174 @@ void gvVkContextInit(struct gvVkContext *ctx) {
 void gvVkContextDestroy(struct gvVkContext *ctx) {
     vkDestroyDevice(ctx->device, NULL);
 #ifdef GV_DEBUG
-    vkDestroyDebugReportCallback(ctx->instance, ctx->debug_cb, NULL);
+    fpDestroyDebugReportCallback(ctx->instance, ctx->debug_cb, NULL);
 #endif
     vkDestroyInstance(ctx->instance, NULL);
 }
 
+struct gvWindow {
+    HINSTANCE hinstance;
+    HWND hwnd;
+    int should_close : 1;
+    int visible : 1;
+    int width;
+    int height;
+    HDC hdc;
+};
+
+static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    static PAINTSTRUCT ps;
+    struct gvWindow *window = (struct gvWindow *) GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
+    if (!window) {
+        return DefWindowProcA(hwnd, msg, wparam, lparam);
+    }
+
+    switch (msg) {
+
+    case WM_CLOSE:
+        window->should_close = 1;
+        PostQuitMessage(0);
+        return 0;
+
+    case WM_SYSCOMMAND:
+        switch (wparam) {
+        case SC_MINIMIZE:
+            window->visible = 0;
+            break;
+        case SC_RESTORE:
+            window->visible = 1;
+            break;
+        case SC_CLOSE:
+            window->should_close = 1;
+            break;
+        }
+        break;
+
+    case WM_KEYDOWN:
+        if (wparam == VK_ESCAPE) {
+            window->should_close = 1;
+            return 0;
+        }
+        break;
+
+    case WM_PAINT:
+//        render(window);
+        BeginPaint(hwnd, &ps);
+        EndPaint(hwnd, &ps);
+        return 0;
+
+    case WM_SIZE:
+        window->width = LOWORD(lparam);
+        window->height = HIWORD(lparam);
+        PostMessageA(hwnd, WM_PAINT, 0, 0);
+        return 0;
+
+    }
+    return DefWindowProcA(hwnd, msg, wparam, lparam);
+}
+
+void gvWindowInit(struct gvWindow *window, HINSTANCE hinstance, int cmd_show) {
+    static const char *class_name = "Some window class";
+    
+    WNDCLASSA wc;
+    ZeroMemory(&wc, sizeof(wc));
+    wc.lpfnWndProc = &WndProc;
+    wc.hInstance = hinstance;
+    wc.lpszClassName = class_name;
+
+    RegisterClassA(&wc);
+
+    window->hwnd = CreateWindowExA(0,
+                               class_name,
+                               "Some window",
+                               WS_OVERLAPPEDWINDOW,
+                               CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
+                               NULL, NULL,
+                               hinstance,
+                               NULL);
+
+    if (window->hwnd == NULL) {
+        MessageBoxA(NULL, "CreateWindowExA() failed", "Error!", MB_OK | MB_ICONERROR);
+        ExitProcess(1);
+        return 1;
+    }
+
+    int pf;
+    PIXELFORMATDESCRIPTOR pfd;
+
+    window->hdc = GetDC(window->hwnd);
+
+    ZeroMemory(&pfd, sizeof(pfd));
+    pfd.nSize = sizeof(pfd);
+    pfd.nVersion = 1;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.cColorBits = 32;
+
+    pf = ChoosePixelFormat(window->hdc, &pfd);
+    SetPixelFormat(window->hdc, pf, &pfd);
+    DescribePixelFormat(window->hdc, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
+
+    ShowWindow(window->hwnd, cmd_show);
+    UpdateWindow(window->hwnd);
+
+    SetWindowLongPtrA(window->hwnd, GWLP_USERDATA, window);
+}
+
+void gvWidnowLoop(struct gvWindow *window) {
+    MSG msg;
+    while (!window->should_close) {
+        while (PeekMessageA(&msg, window->hwnd, 0, 0, PM_NOREMOVE)) {
+            if (GetMessageA(&msg, window->hwnd, 0, 0)) {
+                TranslateMessage(&msg);
+                DispatchMessageA(&msg);
+            } else {
+                return;
+            }
+
+        }
+
+        if (window->visible) {
+            //render(&window);
+            SwapBuffers(window->hdc);
+        }
+        /* update(); */
+    }
+}
+
+void gvWindowDestroy(struct gvWindow *window) {
+    DestroyWindow(window->hwnd);
+}
+
+struct gvVkDisplay {
+    struct gvVkContext *ctx;
+    VkSwapchainKHR swapchain;
+};
+
+void gvVkDisplayInit(struct gvVkDisplay *display, struct gvVkContext *ctx, struct gvWindow *s) {
+    display->ctx = ctx;
+
+    VkSwapchainCreateInfoKHR swapchain_ci = {0};
+}
+
+void gvVkDisplayDestroy(struct gvVkDisplay *display) {
+}
+
+
 int WinMain(HINSTANCE hinstance, HINSTANCE hprev_instance, char *cmd_line, int cmd_show) {
-    struct gvVkContext ctx = {0};
+    struct gvVkContext ctx = { 0 };
+    struct gvWindow window = {0};
+    struct gvVkDisplay display = { 0 };
 
     gvVkContextInit(&ctx);
+    gvWindowInit(&window, hinstance, cmd_show);
+    gvVkDisplayInit(&display, &ctx, &window);
+       
+    gvWidnowLoop(&window);
+
+    gvVkDisplayDestroy(&display, &ctx, &window);
+    gvWindowDestroy(&window);
     gvVkContextDestroy(&ctx);
 
     ExitProcess(0);
