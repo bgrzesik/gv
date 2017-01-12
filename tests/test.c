@@ -13,8 +13,7 @@
 #include <intrin.h>
 #endif
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
 	// __m128 a = _mm_setr_ps(1.0f, 2.0f, 3.0f, 4.0f);
 	// __m128 b = _mm_setr_ps(10.0f, 20.0f, 30.0f, 40.0f);
 	// __m128 c;
@@ -48,9 +47,9 @@ int main(int argc, const char **argv)
  
 	// volatile long v = 0;
 	// printf("v = %ld\n", v);
-	// printf("gvatomic_cmp_xchg(%p, %d, %d) => %ld\n", &v, 1, 0, gvatomic_cmp_xchg(&v, 1, 0));
+	// printf("gvAtomicCmpXchg(%p, %d, %d) => %ld\n", &v, 1, 0, gvAtomicCmpXchg(&v, 1, 0));
 	// printf("v = %ld\n", v);
-	// printf("gvatomic_cmp_xchg(%p, %d, %d) => %ld\n", &v, 1, 0, gvatomic_cmp_xchg(&v, 1, 0));
+	// printf("gvAtomicCmpXchg(%p, %d, %d) => %ld\n", &v, 1, 0, gvAtomicCmpXchg(&v, 1, 0));
 	// printf("v = %ld\n", v);
 
 	return 0;

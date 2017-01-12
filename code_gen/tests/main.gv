@@ -1,3 +1,4 @@
 [include "structs.gv"]
 [include "entities.gv"]
 [include "packets.gv"]
+[include "events.gv"]

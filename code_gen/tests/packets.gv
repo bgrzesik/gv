@@ -1,15 +1,15 @@
 
-[register_compound packet]
+[registerCompound packet]
 
-packet handshake {
+packet Handshake {
     int game_ver;
 };
 
-packet heartbeat {
+packet Heartbeat {
     int send_time;
 };
 
-packet player_join {
+packet PlayerJoin {
     char name[48];
     [unpack] vec2 pos;
 };

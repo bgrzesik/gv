@@ -5,14 +5,11 @@
 #define GV_IMPLEMENTATION
 #include "../gv.h"
 
-GV_CONSTRUCTOR(pre_main) 
-{
-    printf("pre_main()\n");
+GV_CONSTRUCTOR(preMain) {
+    printf("preMain()\n");
 }
 
-int main(int argc, const char **argv)
-{
+int main(int argc, const char **argv) {
     printf("main()\n");
-
     return 0;
 }

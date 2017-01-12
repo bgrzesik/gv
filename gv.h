@@ -28,6 +28,10 @@ extern "C" {
 
 #ifdef _WIN32
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
@@ -75,22 +79,26 @@ extern "C" {
 #endif
 #endif
 
+#ifndef GV_DEFER
+#define GV_DEFER(...) __VA_ARGS__
+#endif
+
 #if (defined(__llvm__) || defined(__clang__) || defined(__GNUC__)) && !defined(GV__PRAGMA)
 #define GV__PRAGMA(...) _Pragma(#__VA_ARGS__)
 #elif defined(_MSC_VER) && !defined(GV__PRAGMA)
-#define GV__PRAGMA(...) __pragma(#__VA_ARGS__)
+#define GV__PRAGMA(...) __pragma(__VA_ARGS__)
 #elif !defined(GV__PRAGMA)
 #define GV__PRAGMA(...)
 #endif
 
 #if !defined(_MSC_VER) && !defined(GV__DIAG)
 #ifdef __GNUC__
-#define GV__DIAG(...) GV__PRAGMA(GCC diagnostic __VA_ARGS__)
+#define GV__DIAG(gnu, msc) GV__PRAGMA(GCC diagnostic GV_DEFER gnu)
 #else
-#define GV__DIAG(...) GV__PRAGMA(clang diagnostic __VA_ARGS__)
+#define GV__DIAG(gnu, msc) GV__PRAGMA(clang diagnostic GV_DEFER gnu)
 #endif
 #elif !defined(GV__DIAG)
-#define GV__DIAG(...)
+#define GV__DIAG(gnu, msc) __pragma(warning msc)
 #endif
 
 #ifndef GV_API
@@ -122,10 +130,6 @@ extern "C" {
 #define GV_ASSERT(...) assert(__VA_ARGS__)
 #endif
 
-#ifndef GV_DEFER
-#define GV_DEFER(...) __VA_ARGS__
-#endif
-
 #if defined(GV__C11) && !defined(GV_STATIC_ASSERT)
 #define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__), #__VA_ARGS__)
 #endif
@@ -135,13 +139,13 @@ extern "C" {
 #define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__), #__VA_ARGS__)
 #endif
 #endif
-
+/* boobs */
 #ifndef GV_STATIC_ASSERT
-#define GV_STATIC_ASSERT(...)                       \
-        GV__DIAG(push)                              \
-        GV__DIAG(ignored "-Wmissing-declarations")  \
-        struct { int: (!!(__VA_ARGS__)); };         \
-        GV__DIAG(pop)
+#define GV_STATIC_ASSERT(...)                                         \
+        GV__DIAG((push), (push))                                      \
+        GV__DIAG((ignored "-Wmissing-declarations"), (disable: 4094))    \
+        struct { int: (!!(__VA_ARGS__)); };                           \
+        GV__DIAG((pop), (pop))
 #endif
 
 #ifndef GV_DEBUG_BREAK
@@ -166,7 +170,7 @@ extern "C" {
     __pragma(comment(linker, "/include:" GV__CONSTRUCTOR_PREFIX #fn "_f"))  \
     static void fn(void)
 #elif !defined(GV_CONSTRUCTOR)  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
-#define GV_CONSTRUCTOR(fn) static void __attribute__ ((unused)) fn(void)
+#define GV_CONSTRUCTOR(fn) static void __attribute__ ((unused, constructor)) fn(void)
 #endif  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
 
 
@@ -195,91 +199,56 @@ extern "C" {
 /*
    TYPES
  */
-#ifdef GV__C99
 #include <stdint.h>
-
-typedef uint8_t             gvu8_t;
-typedef uint16_t            gvu16_t;
-typedef uint32_t            gvu32_t;
-typedef uint64_t            gvu64_t;
-typedef int8_t              gvs8_t;
-typedef int16_t             gvs16_t;
-typedef int32_t             gvs32_t;
-typedef int64_t             gvs64_t;
-typedef intptr_t            gvintptr_t;
-typedef size_t              gvsize_t;
-typedef _Bool               gvbool_t;
-
-#else /* __STDC_VERSION__ > 19901L */
-
-typedef unsigned char       gvu8_t;
-typedef unsigned short      gvu16_t;
-typedef unsigned int        gvu32_t;
-typedef unsigned long long  gvu64_t;
-typedef char                gvs8_t;
-typedef short               gvs16_t;
-typedef int                 gvs32_t;
-typedef long long           gvs64_t;
-
-#ifdef GV_SYS_64BIT
-typedef gvu64_t             gvintptr_t;
-#else
-typedef gvu32_t             gvintptr_t;
-#endif
-
-typedef gvintptr_t          gvsize_t;
-typedef int                 gvbool_t;
-
-#endif /* __STDC_VERSION__ > 19901L */
+#include <stdbool.h>
 
 enum {
     GV_FALSE    = 0,
     GV_TRUE     = 1,
 };
 
+GV_STATIC_ASSERT(sizeof(uint8_t) == 1);
+GV_STATIC_ASSERT(sizeof(uint16_t) == 2);
+GV_STATIC_ASSERT(sizeof(uint32_t) == 4);
+GV_STATIC_ASSERT(sizeof(uint64_t) == 8);
 
-GV_STATIC_ASSERT(sizeof(gvu8_t) == 1);
-GV_STATIC_ASSERT(sizeof(gvu16_t) == 2);
-GV_STATIC_ASSERT(sizeof(gvu32_t) == 4);
-GV_STATIC_ASSERT(sizeof(gvu64_t) == 8);
+GV_STATIC_ASSERT(sizeof(uint8_t) == 1);
+GV_STATIC_ASSERT(sizeof(uint16_t) == 2);
+GV_STATIC_ASSERT(sizeof(uint32_t) == 4);
+GV_STATIC_ASSERT(sizeof(uint64_t) == 8);
 
-GV_STATIC_ASSERT(sizeof(gvs8_t) == 1);
-GV_STATIC_ASSERT(sizeof(gvs16_t) == 2);
-GV_STATIC_ASSERT(sizeof(gvs32_t) == 4);
-GV_STATIC_ASSERT(sizeof(gvs64_t) == 8);
-
-GV_STATIC_ASSERT(sizeof(gvintptr_t) == sizeof(void *));
+GV_STATIC_ASSERT(sizeof(intptr_t) == sizeof(void *));
 
 
 /*
     MIN MAX
  */
-GV_FORCE_INLINE int gv_min(int a, int b) { return a < b ? a : b; }
-GV_FORCE_INLINE int gv_max(int a, int b) { return a > b ? a : b; }
+GV_FORCE_INLINE int gvMin(int a, int b) { return a < b ? a : b; }
+GV_FORCE_INLINE int gvMax(int a, int b) { return a > b ? a : b; }
 
-GV_FORCE_INLINE float gv_minf(float a, float b) { return a < b ? a : b; }
-GV_FORCE_INLINE float gv_maxf(float a, float b) { return a > b ? a : b; }
+GV_FORCE_INLINE float gvMinf(float a, float b) { return a < b ? a : b; }
+GV_FORCE_INLINE float gvMaxf(float a, float b) { return a > b ? a : b; }
 
-GV_FORCE_INLINE long gv_minl(long a, long b) { return a < b ? a : b; }
-GV_FORCE_INLINE long gv_maxl(long a, long b) { return a > b ? a : b; }
+GV_FORCE_INLINE long gvMinl(long a, long b) { return a < b ? a : b; }
+GV_FORCE_INLINE long gvMaxl(long a, long b) { return a > b ? a : b; }
 
-GV_FORCE_INLINE char gv_minc(char a, char b) { return a < b ? a : b; }
-GV_FORCE_INLINE char gv_maxc(char a, char b) { return a > b ? a : b; }
+GV_FORCE_INLINE char gvMinc(char a, char b) { return a < b ? a : b; }
+GV_FORCE_INLINE char gvMaxc(char a, char b) { return a > b ? a : b; }
 
 
 /*
     DYNAMIC LOADING
  */
-GV_API void *gvdl_open(const char *name);
-GV_API void *gvdl_symbol(void *lib, const char *symbol_name);
-GV_API void  gvdl_close(void *lib);
+GV_API void *gvDLOpen(const char *name);
+GV_API void *gvDLSymbol(void *lib, const char *symbol_name);
+GV_API void  gvDLClose(void *lib);
 
 
 /*
     SOCKET
  */
 #ifdef _WIN32
-typedef SOCKET gvsock_t;
+typedef SOCKET GvSocket_t;
 
 #ifndef GVSOCK_INVALID
 #define GVSOCK_INVALID INVALID_SOCKET
@@ -293,7 +262,7 @@ enum {
 };
 
 #else /* _WIN32 */
-typedef int gvsock_t;
+typedef int GvSocket_t;
 
 #ifndef GVSOCK_INVALID
 #define GVSOCK_INVALID (-1)
@@ -307,9 +276,9 @@ enum {
 };
 #endif /* _WIN32 */
 
-GV_API void      gvsock_close(gvsock_t socket);
-GV_API gvbool_t  gvsock_startup(void);
-GV_API void      gvsock_cleanup(void);
+GV_API void      gvSocketClose(GvSocket_t socket);
+GV_API int       gvSockStartup(void);
+GV_API void      gvSockCleanup(void);
 
 
 /*
@@ -317,8 +286,8 @@ GV_API void      gvsock_cleanup(void);
  */
 #ifdef _WIN32
 
-typedef HANDLE gvthread_t;
-typedef DWORD (WINAPI *gvthread_fn_t)(void *);
+typedef HANDLE GvThread_t;
+typedef DWORD (WINAPI *GvThreadFN_t)(void *);
 
 #ifndef GV_THREAD_FN
 #define GV_THREAD_FN(name, param) DWORD WINAPI name(void *param)
@@ -330,8 +299,8 @@ typedef DWORD (WINAPI *gvthread_fn_t)(void *);
 
 #else /* _WIN32 */
 
-typedef pthread_t gvthread_t;
-typedef void *(*gvthread_fn_t)(void *);
+typedef pthread_t GvThread_t;
+typedef void *(*GvThreadFN_t)(void *);
 
 #ifndef GV_THREAD_FN
 #define GV_THREAD_FN(name, param) void *name(void *param)
@@ -343,94 +312,94 @@ typedef void *(*gvthread_fn_t)(void *);
 
 #endif
 
-GV_API gvbool_t      gvthread_init(gvthread_t *th, gvthread_fn_t fn, void *param);
-GV_API gvbool_t      gvthread_join(gvthread_t *th);
+GV_API int      gvThreadInit(GvThread_t *th, GvThreadFN_t fn, void *param);
+GV_API int      gvThreadJoin(GvThread_t *th);
 
 
 /*
     MUTEX
  */
 #ifdef _WIN32
-typedef CRITICAL_SECTION gvmutex_t;
+typedef CRITICAL_SECTION gvMutex_t;
 #else
-typedef pthread_mutex_t gvmutex_t;
+typedef pthread_mutex_t gvMutex_t;
 #endif
 
-GV_API void      gvmutex_init(gvmutex_t *mutex);
-GV_API void      gvmutex_destroy(gvmutex_t *mutex);
-GV_API void      gvmutex_lock(gvmutex_t *mutex);
-GV_API void      gvmutex_unlock(gvmutex_t *mutex);
-GV_API gvbool_t  gvmutex_trylock(gvmutex_t *mutex);
+GV_API void      gvMutexInit(gvMutex_t *mutex);
+GV_API void      gvMutexDestroy(gvMutex_t *mutex);
+GV_API void      gvMutexLock(gvMutex_t *mutex);
+GV_API void      gvMutexUnlock(gvMutex_t *mutex);
+GV_API int       gvMutexTryLock(gvMutex_t *mutex);
 
 
 /*
     ATOMIC
  */
-GV_API long  gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp);
-GV_API long  gvatomic_xchg_add(volatile long *dst, long val);
-GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *const cmp);
+GV_API long  gvAtomicCmpXchg(volatile long *dst, long xchg, long cmp);
+GV_API long  gvAtomicXchgAdd(volatile long *dst, long val);
+GV_API void *gvAtomicCmpXchgv(void *volatile *dst, void *const xchg, void *const cmp);
 
 
 /*
     CONDITION VARIABLE
  */
 #ifdef _WIN32
-typedef CONDITION_VARIABLE gvcondvar_t;
+typedef CONDITION_VARIABLE GvCondVar_t;
 #else
-typedef pthread_cond_t gvcondvar_t;
+typedef pthread_cond_t GvCondVar_t;
 #endif
 
-GV_API gvbool_t  gvcondvar_init(gvcondvar_t *cond);
-GV_API gvbool_t  gvcondvar_destroy(gvcondvar_t *cond);
-GV_API gvbool_t  gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex);
-GV_API gvbool_t  gvcondvar_notify(gvcondvar_t *cond);
-GV_API gvbool_t  gvcondvar_notify_all(gvcondvar_t *cond);
+GV_API int      gvCondVarInit(GvCondVar_t *cond);
+GV_API int      gvCondVarDestroy(GvCondVar_t *cond);
+GV_API int      gvCondVarWait(GvCondVar_t *cond, gvMutex_t *mutex);
+GV_API int      gvCondVarNotify(GvCondVar_t *cond);
+GV_API int      gvCondVarNotifyAll(GvCondVar_t *cond);
 
 
 /*
     EVENT
  */
 #ifdef _WIN32
-struct gvevent {
+struct GvEvent {
     HANDLE event;
     volatile long waiters;
 };
 #else   /* _WIN32 */
-struct gvevent {
+struct GvEvent {
     pthread_cond_t cond;
     pthread_mutex_t mut;
 };
 #endif  /* _WIN32 */
 
-GV_API gvbool_t  gvevent_init(struct gvevent *event);
-GV_API gvbool_t  gvevent_wait(struct gvevent *event);
-GV_API gvbool_t  gvevent_notify(struct gvevent *event);
-GV_API gvbool_t  gvevent_destroy(struct gvevent *event);
+GV_API int     gvEventInit(struct GvEvent *event);
+GV_API int     gvEventWait(struct GvEvent *event);
+GV_API int     gvEventNotify(struct GvEvent *event);
+GV_API int     gvEventDestroy(struct GvEvent *event);
 
 
 /*
     THREAD POOL
  */
-struct gvthread_task {
-    gvthread_fn_t            fn;
+struct GvThreadTask {
+    GvThreadFN_t            fn;
     void                    *param;
-    struct gvthread_task    *next;
+    struct GvThreadTask    *next;
 };
 
-struct gvthread_pool {
-    struct gvthread_task *volatile front;
-    struct gvthread_task *volatile rear;
+struct GvThreadPool {
+    struct GvThreadTask *volatile front;
+    struct GvThreadTask *volatile rear;
 
-    gvcondvar_t supervisor;
-    gvmutex_t guard;
+    GvCondVar_t supervisor;
+    gvMutex_t guard;
 
-    gvbool_t is_working;
-    int num_workers;
+    int is_working;
+    size_t num_workers;
     volatile long num_working;
 
-    struct gvevent ready_done;
+    struct GvEvent ready_done;
 
-    gvthread_t *workers;
+    GvThread_t *workers;
 };
 
 #if defined(_WIN32) && !defined(GV_THREAD_POOL_TASK_RETURN)
@@ -439,9 +408,9 @@ struct gvthread_pool {
 #define GV_THREAD_POOL_TASK_RETURN() return NULL;
 #endif
 
-GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers, gvthread_t *workers);
-GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_task *task, gvthread_fn_t func, void *param);
-GV_API void gvthread_pool_destroy(struct gvthread_pool *pool);
+GV_API void gvThreadPoolInit(struct GvThreadPool *pool, size_t num_workers, GvThread_t *workers);
+GV_API void gvThreadPoolSchedule(struct GvThreadPool *pool, struct GvThreadTask *task, GvThreadFN_t func, void *param);
+GV_API void gvThreadPoolDestroy(struct GvThreadPool *pool);
 
 
 #endif  /* __GV_H__ */
@@ -457,35 +426,29 @@ GV_API void gvthread_pool_destroy(struct gvthread_pool *pool);
  */
 #ifdef _WIN32
 
-GV_API void *gvdl_open(const char *name)
-{
-    return LoadLibrary(name);
+GV_API void *gvDLOpen(const char *name) {
+    return LoadLibraryA(name);
 }
 
-GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
-{
+GV_API void *gvDLSymbol(void *lib, const char *symbol_name) {
     return (void *) GetProcAddress(lib, symbol_name);
 }
 
-GV_API void gvdl_close(void *lib)
-{
+GV_API void gvDLClose(void *lib) {
     FreeLibrary(lib);
 }
 
 #else   /* _WIN32 */
 
-GV_API void *gvdl_open(const char *name)
-{
+GV_API void *gvDLOpen(const char *name) {
     return dlopen(name, RTLD_LAZY);
 }
 
-GV_API void *gvdl_symbol(void *lib, const char *symbol_name)
-{
+GV_API void *gvDLSymbol(void *lib, const char *symbol_name) {
     return dlsym(lib, symbol_name);
 }
 
-GV_API void gvdl_close(void *lib)
-{
+GV_API void gvDLClose(void *lib) {
     dlclose(lib);
 }
 
@@ -496,45 +459,41 @@ GV_API void gvdl_close(void *lib)
  */
 #ifdef _WIN32
 
-GV_API void gvsock_close(gvsock_t socket)
-{
+GV_API void gvSocketClose(GvSocket_t socket) {
     closesocket(socket);
 }
 
-GV_API gvbool_t gvsock_startup(void)
-{
+GV_API int gvSockStartup(void) {
     WSADATA wsa_data;
     return WSAStartup(MAKEWORD(2, 2), &wsa_data);
 }
 
-GV_API void gvsock_cleanup(void)
-{
+GV_API void gvSockCleanup(void) {
     WSACleanup();
 }
 
 #ifdef GV_SOCK_CONSTRUCTOR
-GV_CONSTRUCTOR(gvsock__sock_constructor)
-{
+
+__declspec(dllimport) int atexit(void (__cdecl *func)(void));
+
+GV_CONSTRUCTOR(gvSock_sockConstructor) {
     WSADATA wsa_data;
     WSAStartup(MAKEWORD(2, 2), &wsa_data);
-    atexit(&gvsock_cleanup);
+    atexit(&gvSockCleanup);
 }
 #endif  /* GV_SOCK_CONSTRUCTOR */
 
 #else /* _WIN32 */
 
-GV_API void gvsock_close(gvsock_t socket)
-{
+GV_API void gvSocketClose(GvSocket_t socket) {
     close(socket);
 }
 
-GV_API gvbool_t gvsock_startup(void)
-{
+GV_API int gvSockStartup(void) {
     return 0;
 }
 
-GV_API void gvsock_cleanup(void)
-{
+GV_API void gvSockCleanup(void) {
 }
 
 #endif /* _WIN32 */
@@ -544,26 +503,22 @@ GV_API void gvsock_cleanup(void)
  */
 #ifdef _WIN32
 
-GV_API gvbool_t gvthread_init(gvthread_t *th, gvthread_fn_t fn, void *param)
-{
+GV_API int gvThreadInit(GvThread_t *th, GvThreadFN_t fn, void *param) {
     *th = CreateThread(NULL, 0, fn, param, 0, NULL);
     return !!th;
 }
 
-GV_API gvbool_t gvthread_join(gvthread_t *th)
-{
+GV_API int gvThreadJoin(GvThread_t *th) {
     return WaitForSingleObject(*th, INFINITE);
 }
 
 #else   /* _WIN32 */
 
-GV_API gvbool_t gvthread_init(gvthread_t *th, gvthread_fn_t fn, void *param)
-{
+GV_API int gvThreadInit(GvThread_t *th, GvThreadFN_t fn, void *param) {
     return pthread_create(th, NULL, fn, param) == 0;
 }
 
-GV_API gvbool_t gvthread_join(gvthread_t *th)
-{
+GV_API int gvThreadJoin(GvThread_t *th) {
     return pthread_join(*th, NULL);
 }
 
@@ -574,56 +529,46 @@ GV_API gvbool_t gvthread_join(gvthread_t *th)
  */
 #ifdef _WIN32
 
-GV_API void gvmutex_init(gvmutex_t *mutex)
-{
+GV_API void gvMutexInit(gvMutex_t *mutex) {
     gv_memset(mutex, 0, sizeof(*mutex));
     InitializeCriticalSection(mutex);
 }
 
-GV_API void gvmutex_destroy(gvmutex_t *mutex)
-{
+GV_API void gvMutexDestroy(gvMutex_t *mutex) {
     DeleteCriticalSection(mutex);
 }
 
-GV_API void gvmutex_lock(gvmutex_t *mutex)
-{
+GV_API void gvMutexLock(gvMutex_t *mutex) {
     EnterCriticalSection(mutex);
 }
 
-GV_API void gvmutex_unlock(gvmutex_t *mutex)
-{
+GV_API void gvMutexUnlock(gvMutex_t *mutex) {
     LeaveCriticalSection(mutex);
 }
 
-GV_API gvbool_t gvmutex_trylock(gvmutex_t *mutex)
-{
+GV_API int gvMutexTryLock(gvMutex_t *mutex) {
     return TryEnterCriticalSection(mutex);
 }
 
 #else   /* _WIN32 */
 
-GV_API void gvmutex_init(gvmutex_t *mutex)
-{
+GV_API void gvMutexInit(gvMutex_t *mutex) {
     pthread_mutex_init(mutex, NULL);
 }
 
-GV_API void gvmutex_destroy(gvmutex_t *mutex)
-{
+GV_API void gvMutexDestroy(gvMutex_t *mutex) {
     pthread_mutex_destroy(mutex);
 }
 
-GV_API void gvmutex_lock(gvmutex_t *mutex)
-{
+GV_API void gvMutexLock(gvMutex_t *mutex) {
     pthread_mutex_lock(mutex);
 }
 
-GV_API void gvmutex_unlock(gvmutex_t *mutex)
-{
+GV_API void gvMutexUnlock(gvMutex_t *mutex) {
     pthread_mutex_unlock(mutex);
 }
 
-GV_API gvbool_t gvmutex_trylock(gvmutex_t *mutex)
-{
+GV_API int gvMutexTryLock(gvMutex_t *mutex) {
     return pthread_mutex_unlock(mutex) == 0;
 }
 
@@ -635,35 +580,29 @@ GV_API gvbool_t gvmutex_trylock(gvmutex_t *mutex)
  */
 #ifdef _WIN32
 
-GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
-{
+GV_API long gvAtomicCmpXchg(volatile long *dst, long xchg, long cmp) {
     return _InterlockedCompareExchange(dst, xchg, cmp);
 }
 
-GV_API long gvatomic_xchg_add(volatile long *dst, long val)
-{
+GV_API long gvAtomicXchgAdd(volatile long *dst, long val) {
     return _InterlockedExchangeAdd(dst, val);
 }
 
-GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *const cmp)
-{
+GV_API void *gvAtomicCmpXchgv(void *volatile *dst, void *const xchg, void *const cmp) {
     return _InterlockedCompareExchangePointer(dst, xchg, cmp);
 }
 
 #else   /* _WIN32 */
 
-GV_API long gvatomic_cmp_xchg(volatile long *dst, long xchg, long cmp)
-{
+GV_API long gvAtomicCmpXchg(volatile long *dst, long xchg, long cmp) {
     return __sync_val_compare_and_swap(dst, cmp, xchg);
 }
 
-GV_API long gvatomic_xchg_add(volatile long *dst, long val)
-{
+GV_API long gvAtomicXchgAdd(volatile long *dst, long val) {
     return __sync_fetch_and_add (dst, val);
 }
 
-GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *const cmp)
-{
+GV_API void *gvAtomicCmpXchgv(void *volatile *dst, void *const xchg, void *const cmp) {
     return __sync_val_compare_and_swap(dst, cmp, xchg);
 }
 
@@ -675,58 +614,48 @@ GV_API void *gvatomic_cmp_xchgv(void *volatile *dst, void *const xchg, void *con
  */
 #ifdef _WIN32
 
-GV_API gvbool_t gvcondvar_init(gvcondvar_t *cond)
-{
+GV_API int gvCondVarInit(GvCondVar_t *cond) {
     InitializeConditionVariable(cond);
     return GV_TRUE;
 }
 
-GV_API gvbool_t gvcondvar_destroy(gvcondvar_t *cond)
-{
+GV_API int gvCondVarDestroy(GvCondVar_t *cond) {
     return GV_TRUE;
 }
 
-GV_API gvbool_t gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex)
-{
+GV_API int gvCondVarWait(GvCondVar_t *cond, gvMutex_t *mutex) {
     return SleepConditionVariableCS(cond, mutex, INFINITE);
 }
 
-GV_API gvbool_t gvcondvar_notify(gvcondvar_t *cond)
-{
+GV_API int gvCondVarNotify(GvCondVar_t *cond) {
     WakeConditionVariable(cond);
     return GV_TRUE;
 }
 
-GV_API gvbool_t gvcondvar_notify_all(gvcondvar_t *cond)
-{
+GV_API int gvCondVarNotifyAll(GvCondVar_t *cond) {
     WakeAllConditionVariable(cond);
     return GV_TRUE;
 }
 
 #else   /* _WIN32 */
 
-GV_API gvbool_t gvcondvar_init(gvcondvar_t *cond)
-{
+GV_API int gvCondVarInit(GvCondVar_t *cond) {
     return pthread_cond_init(cond, NULL) == 0;
 }
 
-GV_API gvbool_t gvcondvar_destroy(gvcondvar_t *cond)
-{
+GV_API int gvCondVarDestroy(GvCondVar_t *cond) {
     return pthread_cond_destroy(cond) == 0;
 }
 
-GV_API gvbool_t gvcondvar_wait(gvcondvar_t *cond, gvmutex_t *mutex)
-{
+GV_API int gvCondVarWait(GvCondVar_t *cond, gvMutex_t *mutex) {
     return pthread_cond_wait(cond, mutex) == 0;
 }
 
-GV_API gvbool_t gvcondvar_notify(gvcondvar_t *cond)
-{
+GV_API int gvCondVarNotify(GvCondVar_t *cond) {
     return pthread_cond_signal(cond) == 0;
 }
 
-GV_API gvbool_t gvcondvar_notify_all(gvcondvar_t *cond)
-{
+GV_API int gvCondVarNotifyAll(GvCondVar_t *cond) {
     return pthread_cond_broadcast(cond) == 0;
 }
 
@@ -738,14 +667,12 @@ GV_API gvbool_t gvcondvar_notify_all(gvcondvar_t *cond)
  */
 #ifdef _WIN32
 
-GV_API gvbool_t  gvevent_init(struct gvevent *event)
-{
+GV_API int  gvEventInit(struct GvEvent *event) {
     event->waiters = 0;
     return (event->event = CreateEvent(NULL, TRUE, FALSE, NULL)) != NULL;
 }
 
-GV_API gvbool_t  gvevent_wait(struct gvevent *event)
-{
+GV_API int  gvEventWait(struct GvEvent *event) {
     long last;
 
     _InterlockedExchangeAdd(&event->waiters, 1);
@@ -759,29 +686,25 @@ GV_API gvbool_t  gvevent_wait(struct gvevent *event)
     return GV_TRUE;
 }
 
-GV_API gvbool_t  gvevent_notify(struct gvevent *event)
-{
+GV_API int  gvEventNotify(struct GvEvent *event) {
     return SetEvent(event->event);
 }
 
-GV_API gvbool_t  gvevent_destroy(struct gvevent *event)
-{
+GV_API int  gvEventDestroy(struct GvEvent *event) {
     return CloseHandle(event->event);
 }
 
 
 #else   /* _WIN32 */
 
-GV_API gvbool_t  gvevent_init(struct gvevent *event)
-{
+GV_API int  gvEventInit(struct GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_init(&event->mut, NULL);
     res |= pthread_cond_init(&event->cond, NULL);
     return res;
 }
 
-GV_API gvbool_t  gvevent_wait(struct gvevent *event)
-{
+GV_API int  gvEventWait(struct GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_lock(&event->mut);
     res |= pthread_cond_wait(&event->cond, &event->mut);
@@ -789,8 +712,7 @@ GV_API gvbool_t  gvevent_wait(struct gvevent *event)
     return res == 0;
 }
 
-GV_API gvbool_t  gvevent_notify(struct gvevent *event)
-{
+GV_API int  gvEventNotify(struct GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_lock(&event->mut);
     res |= pthread_cond_broadcast(&event->cond);
@@ -798,8 +720,7 @@ GV_API gvbool_t  gvevent_notify(struct gvevent *event)
     return res == 0;
 }
 
-GV_API gvbool_t  gvevent_destroy(struct gvevent *event)
-{
+GV_API int  gvEventDestroy(struct GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_destroy(&event->mut);
     res |= pthread_cond_destroy(&event->cond);
@@ -812,28 +733,27 @@ GV_API gvbool_t  gvevent_destroy(struct gvevent *event)
 /*
     THREAD POOL IMPLEMENTATION
  */
-GV_THREAD_FN(gvthread_pool__func, param)
-{
-    struct gvthread_pool *pool = param;
-    struct gvthread_task *task = NULL, *last_front = NULL, *last_next = NULL;
-
-    gvatomic_xchg_add(&pool->num_working, 1);
+GV_THREAD_FN(gvThreadPool_func, param) {
+    struct GvThreadPool *pool = param;
+    struct GvThreadTask *task = NULL, *last_front = NULL, *last_next = NULL;
+    
+    gvAtomicXchgAdd(&pool->num_working, 1);
 
     if (pool->num_working == pool->num_workers) {
-        gvevent_notify(&pool->ready_done);
+        gvEventNotify(&pool->ready_done);
     }
 
     while (1) {
-        gvmutex_lock(&pool->guard);
+        gvMutexLock(&pool->guard);
         while (pool->is_working && !pool->front) {
-            gvcondvar_wait(&pool->supervisor, &pool->guard);
+            gvCondVarWait(&pool->supervisor, &pool->guard);
         }
-        gvmutex_unlock(&pool->guard);
+        gvMutexUnlock(&pool->guard);
 
         if (!pool->front) {
             if (!pool->is_working) {
-                if (gvatomic_xchg_add(&pool->num_working, -1) == 1) { /* if i'm the last worker notify the destructor */
-                    gvevent_notify(&pool->ready_done);
+                if (gvAtomicXchgAdd(&pool->num_working, -1) == 1) { /* if i'm the last worker notify the destructor */
+                    gvEventNotify(&pool->ready_done);
                 }
 
                 GV_THREAD_RETURN();
@@ -845,7 +765,7 @@ GV_THREAD_FN(gvthread_pool__func, param)
             last_front = pool->front;
             if (last_front) {
                 last_next = last_front->next;
-                task = gvatomic_cmp_xchgv((void * volatile *) &pool->front, last_next, last_front);
+                task = gvAtomicCmpXchgv((void * volatile *) &pool->front, last_next, last_front);
             }
         } while (task != last_front && pool->front != NULL);
 
@@ -858,8 +778,7 @@ GV_THREAD_FN(gvthread_pool__func, param)
     GV_THREAD_RETURN();
 }
 
-GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers, gvthread_t*workers)
-{
+GV_API void gvThreadPoolInit(struct GvThreadPool *pool, size_t num_workers, GvThread_t*workers) {
     gv_memset(pool, 0, sizeof(*pool)); /* undefined behavior happens without this */
 
     pool->rear = NULL;
@@ -868,20 +787,19 @@ GV_API void gvthread_pool_init(struct gvthread_pool *pool, gvsize_t num_workers,
     pool->num_workers = num_workers;
     pool->workers = workers;
 
-    gvmutex_init(&pool->guard);
-    gvcondvar_init(&pool->supervisor);
-    gvevent_init(&pool->ready_done);
+    gvMutexInit(&pool->guard);
+    gvCondVarInit(&pool->supervisor);
+    gvEventInit(&pool->ready_done);
 
     int i;
     for (i = 0; i < pool->num_workers; i++) {
-        gvthread_init(&pool->workers[i], &gvthread_pool__func, pool);
+        gvThreadInit(&pool->workers[i], &gvThreadPool_func, pool);
     }
 
-    gvevent_wait(&pool->ready_done);
+    gvEventWait(&pool->ready_done);
 }
 
-GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_task *task, gvthread_fn_t fn, void *param)
-{
+GV_API void gvThreadPoolSchedule(struct GvThreadPool *pool, struct GvThreadTask *task, GvThreadFN_t fn, void *param) {
     task->fn = fn;
     task->param = param;
     task->next = NULL;
@@ -894,30 +812,29 @@ GV_API void gvthread_pool_schedule(struct gvthread_pool *pool, struct gvthread_t
         pool->rear = task;
     }
 
-    gvmutex_lock(&pool->guard);
-    gvcondvar_notify(&pool->supervisor);
-    gvmutex_unlock(&pool->guard);
+    gvMutexLock(&pool->guard);
+    gvCondVarNotify(&pool->supervisor);
+    gvMutexUnlock(&pool->guard);
 }
 
-GV_API void gvthread_pool_destroy(struct gvthread_pool *pool)
-{
+GV_API void gvThreadPoolDestroy(struct GvThreadPool *pool) {
     pool->is_working = 0;
-    gvmutex_lock(&pool->guard);
-    gvcondvar_notify_all(&pool->supervisor);
-    gvmutex_unlock(&pool->guard);
+    gvMutexLock(&pool->guard);
+    gvCondVarNotifyAll(&pool->supervisor);
+    gvMutexUnlock(&pool->guard);
 
     if (pool->num_working > 0) {
-        gvevent_wait(&pool->ready_done);
+        gvEventWait(&pool->ready_done);
     }
     
     int i;
     for (i = 0; i < pool->num_workers; i++) {
-        gvthread_join(&pool->workers[i]);
+        gvThreadJoin(&pool->workers[i]);
     }
 
-    gvmutex_destroy(&pool->guard);
-    gvcondvar_destroy(&pool->supervisor);
-    gvevent_destroy(&pool->ready_done);
+    gvMutexDestroy(&pool->guard);
+    gvCondVarDestroy(&pool->supervisor);
+    gvEventDestroy(&pool->ready_done);
 }
 
 

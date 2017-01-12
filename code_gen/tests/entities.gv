@@ -1,0 +1,22 @@
+
+[registerCompound entity]
+
+entity Player {
+    [unpack] Vec2 pos;
+    int score;
+};
+
+entity Enemy {
+    [unpack] Vec2 pos;
+    float health;
+};
+
+entity Missle {
+    [unpack] Vec2 pos;
+    [unpack] Vec2 dir;
+};
+
+entity Obstacle {
+    [unpack] Vec2 pos;
+    [unpack] Vec2 size;
+};

@@ -1,0 +1,6 @@
+
+[registerCompound event]
+
+event Load {
+	char version[255];
+};

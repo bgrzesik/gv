@@ -16,9 +16,9 @@
 
 // static inline void *__cdecl fake_memset(void *ptr, int val, gvsize_t size)
 // {
-//     register gvu8_t *sp = ptr;
+//     register GvU8_t *sp = ptr;
 //     register __m128i val128 = _mm_set1_epi32(val);
-//     register gvu8_t val8 = val;
+//     register GvU8_t val8 = val;
 
 //     while ( size-- && ((gvintptr_t) sp & (gvintptr_t) -16) < ((gvintptr_t) sp)) {
 //         *(sp++) = val8;        

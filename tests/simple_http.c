@@ -8,10 +8,10 @@
 
 int main(int argc, const char **argv)
 {
-    gvsock_startup();
+    gvSockStartup();
     
-    gvsock_t listen_sock;
-    gvsock_t conn_sock;
+    GvSocket_t listen_sock;
+    GvSocket_t conn_sock;
 
     char buff[512];
     struct sockaddr_in serv_addr;
@@ -70,11 +70,11 @@ int main(int argc, const char **argv)
         r += sprintf(buff, "HTTP/1.1 200 OK\n\n%s", response);
         
         send(conn_sock, buff, r, 0);
-        gvsock_close(conn_sock);
+        gvSocketClose(conn_sock);
     }
 
-    gvsock_close(listen_sock);
+    gvSocketClose(listen_sock);
 
-    gvsock_cleanup();
+    gvSockCleanup();
     return 0;
 }

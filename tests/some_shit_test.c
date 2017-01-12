@@ -17,8 +17,11 @@
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 
+#pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "glfw3.lib")
+#pragma comment(lib, "glew32s.lib")
 
-struct vertex {
+struct Vertex {
     union { 
         struct { float x, y; };
         float pos[2];
@@ -34,12 +37,6 @@ struct vertex {
         float uv[2];
     };
 };
-
-
-void error_handler(int error, const char *desc)
-{
-    stb_fatal("glfw error %d: %s\n", error, desc);
-}
 
 int main(int argc, const char **argv)
 {
@@ -65,7 +62,7 @@ int main(int argc, const char **argv)
         return 3;
     }
 
-    static const struct vertex vertices[] = {
+    static const struct Vertex vertices[] = {
         {  1.0f,  1.0f,  1.0f, 1.0f, 1.0f, 1.0f,  1.0f, 0.0f },
         { -1.0f,  1.0f,  1.0f, 0.0f, 1.0f, 1.0f,  0.0f, 0.0f },
         { -1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 1.0f,  0.0f, 1.0f },
@@ -100,8 +97,8 @@ int main(int argc, const char **argv)
         int win_w, win_h;
         glfwGetWindowSize(window, &win_w, &win_h);
 
-        float ratio_horiz = gv_maxf(win_w / (float) win_h, 1.0f);
-        float ratio_verti = gv_maxf(win_h / (float) win_w, 1.0f);
+        float ratio_horiz = gvMaxf(win_w / (float) win_h, 1.0f);
+        float ratio_verti = gvMaxf(win_h / (float) win_w, 1.0f);
 
         glViewport(0, 0, win_w, win_h);
         glMatrixMode(GL_PROJECTION);
@@ -145,6 +142,10 @@ int main(int argc, const char **argv)
         glDrawArrays(GL_QUADS, 0, num_quads * 4);
 
         glDisableClientState(GL_VERTEX_ARRAY);
+
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
