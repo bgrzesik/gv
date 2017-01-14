@@ -99,7 +99,7 @@ DWORD backgroundServer(void *param) {
 
     int to_size = sizeof(to);
 
-    static const char response[] = "Hi dumpass!";
+    static const char response[] = "Hi dumbass!";
 
     int sent = sendto(s, response, sizeof(response), 0, &to, to_size);
     if (sent < 0) {
