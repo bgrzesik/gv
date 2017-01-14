@@ -226,6 +226,9 @@ GV_STATIC_ASSERT(sizeof(intptr_t) == sizeof(void *));
 GV_FORCE_INLINE int gvMin(int a, int b) { return a < b ? a : b; }
 GV_FORCE_INLINE int gvMax(int a, int b) { return a > b ? a : b; }
 
+GV_FORCE_INLINE int gvMinu(unsigned int a, unsigned int b) { return a < b ? a : b; }
+GV_FORCE_INLINE int gvMaxu(unsigned int a, unsigned int b) { return a > b ? a : b; }
+
 GV_FORCE_INLINE float gvMinf(float a, float b) { return a < b ? a : b; }
 GV_FORCE_INLINE float gvMaxf(float a, float b) { return a > b ? a : b; }
 
