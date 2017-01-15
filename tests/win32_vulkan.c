@@ -63,6 +63,12 @@ struct gvVkDisplay {
     VkCommandBuffer cmd_buff;
     
     VkSwapchainKHR swapchain;
+    uint32_t swapchain_image_count;
+    VkImage swapchain_images[8];
+    VkImageView swapchain_image_views[8];
+
+    VkImage depth_img;
+    VkImageView depth_img_view;
 };
 
 
@@ -129,11 +135,14 @@ void gvWindowInit(struct gvWindow *window, HINSTANCE hinstance, int cmd_show) {
 
     RegisterClassA(&wc);
 
+    window->width = 1280;
+    window->height = 720;
+
     window->hwnd = CreateWindowExA(0,
                                class_name,
                                "Some window",
                                WS_OVERLAPPEDWINDOW,
-                               CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
+                               CW_USEDEFAULT, CW_USEDEFAULT, window->width, window->height,
                                NULL, NULL,
                                hinstance,
                                NULL);
@@ -142,6 +151,12 @@ void gvWindowInit(struct gvWindow *window, HINSTANCE hinstance, int cmd_show) {
         MessageBoxA(NULL, "CreateWindowExA() failed", "Error!", MB_OK | MB_ICONERROR);
         ExitProcess(1);
     }
+
+    RECT rect;
+    GetClientRect(window->hwnd, &rect);
+
+    window->width = rect.right - rect.left;
+    window->height = rect.bottom - rect.top;
 
     int pf;
     PIXELFORMATDESCRIPTOR pfd;
@@ -378,7 +393,8 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
     device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_ci.queueCreateInfoCount = 1;
     device_ci.pQueueCreateInfos = queue_cis;
-    device_ci.enabledLayerCount = 0;
+    device_ci.enabledExtensionCount = 1;
+    device_ci.ppEnabledExtensionNames = (const char *[]) { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
     VK_CHECK(vkCreateDevice(ctx->physical_device, &device_ci, NULL, &ctx->device));
 
@@ -439,14 +455,98 @@ void gvVkDisplayInit(struct gvVkDisplay *display, struct gvVkContext *ctx, struc
 
     vkAllocateCommandBuffers(ctx->device, &cmd_buff_ai, &display->cmd_buff);
 
+    
+    VkSurfaceCapabilitiesKHR surface_caps = {0};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx->physical_device, display->surface, &surface_caps);
+
     VkSwapchainCreateInfoKHR swapchain_ci = {0};
     swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchain_ci.surface = display->surface;
-    swapchain_ci.pQueueFamilyIndices = (uint32_t[]) { ctx->present_family };
-    swapchain_ci.queueFamilyIndexCount = 1;
+    swapchain_ci.minImageCount = gvMinu(surface_caps.minImageCount + 1, surface_caps.maxImageCount);
+    swapchain_ci.imageFormat = color_format;
+    swapchain_ci.imageExtent.width = gvClamp(window->width, surface_caps.minImageExtent.width, surface_caps.maxImageExtent.width);
+    swapchain_ci.imageExtent.height = gvClamp(window->height, surface_caps.minImageExtent.height, surface_caps.maxImageExtent.height);
+    
+    if (surface_caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+        swapchain_ci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    } else {
+        swapchain_ci.preTransform = surface_caps.currentTransform;
+    }
+    
+    swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchain_ci.imageArrayLayers = 1;
+    swapchain_ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchain_ci.oldSwapchain = display->swapchain;
+    swapchain_ci.clipped = VK_TRUE;
+    swapchain_ci.imageColorSpace = color_space;
+    swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+ 
+    if (ctx->graphics_family != ctx->present_family) {
+        swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swapchain_ci.queueFamilyIndexCount = 2;
+        swapchain_ci.pQueueFamilyIndices = (uint32_t[]) { ctx->graphics_family, ctx->present_family, };
+    } else {
+        swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swapchain_ci.queueFamilyIndexCount = 0;
+        swapchain_ci.pQueueFamilyIndices = NULL;
+    }
+
+    VK_CHECK(vkCreateSwapchainKHR(ctx->device, &swapchain_ci, NULL, &display->swapchain));
+
+    display->swapchain_image_count = sizeof(display->swapchain_images) / sizeof(display->swapchain_images[0]);
+    VK_CHECK(vkGetSwapchainImagesKHR(ctx->device, display->swapchain, &display->swapchain_image_count, display->swapchain_images));
+
+    VkImageViewCreateInfo img_view_ci = {0};
+    img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    img_view_ci.viewType = VK_IMAGE_TYPE_2D;
+    img_view_ci.format = color_format;
+    img_view_ci.components.r = VK_COMPONENT_SWIZZLE_R;
+    img_view_ci.components.g = VK_COMPONENT_SWIZZLE_G;
+    img_view_ci.components.b = VK_COMPONENT_SWIZZLE_B;
+    img_view_ci.components.a = VK_COMPONENT_SWIZZLE_A;
+    img_view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    img_view_ci.subresourceRange.baseMipLevel = 0;
+    img_view_ci.subresourceRange.levelCount = 1;
+    img_view_ci.subresourceRange.baseArrayLayer = 0;
+    img_view_ci.subresourceRange.layerCount = 1;
+
+    uint32_t i;
+    for (i = 0; i < display->swapchain_image_count; i++) {
+        img_view_ci.image = display->swapchain_images[i];
+        VK_CHECK(vkCreateImageView(ctx->device, &img_view_ci, NULL, &display->swapchain_image_views[i]));
+    }
+
+    VkImageCreateInfo depth_img_ci = {0};
+    depth_img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    depth_img_ci.imageType = VK_IMAGE_TYPE_2D;
+    depth_img_ci.format = VK_FORMAT_D16_UNORM;
+    depth_img_ci.extent.width = window->width;
+    depth_img_ci.extent.height = window->height;
+    depth_img_ci.extent.depth = 1;
+    depth_img_ci.mipLevels = 1;
+    depth_img_ci.arrayLayers = 1;
+    depth_img_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_img_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_img_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    depth_img_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    vkCreateImage(ctx->device, &depth_img_ci, NULL, &display->depth_img);
+
+    VkMemoryRequirements mem_reqs;
+    vkGetImageMemoryRequirements(ctx->device, display->depth_img, &mem_reqs);
+
+    VkMemoryAllocateInfo mem_alloc = {0};
+    mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mem_alloc.allocationSize = mem_reqs.size;
 }
 
 void gvVkDisplayDestroy(struct gvVkDisplay *display) {
+    uint32_t i;
+    for (i = 0; i < display->swapchain_image_count; i++) {
+        vkDestroyImageView(display->ctx->device, display->swapchain_image_views[i], NULL);
+    }
+
+    vkDestroySwapchainKHR(display->ctx->device, display->swapchain, NULL);
     vkDestroyCommandPool(display->ctx->device, display->cmd_pool, NULL);
     vkDestroySurfaceKHR(display->ctx->instance, display->surface, NULL);
 }

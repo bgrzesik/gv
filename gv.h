@@ -221,22 +221,27 @@ GV_STATIC_ASSERT(sizeof(intptr_t) == sizeof(void *));
 
 
 /*
-    MIN MAX
+    MIN MAX CLAMP
  */
 GV_FORCE_INLINE int gvMin(int a, int b) { return a < b ? a : b; }
 GV_FORCE_INLINE int gvMax(int a, int b) { return a > b ? a : b; }
+GV_FORCE_INLINE int gvClamp(int x, int min, int max) { return gvMin(gvMax(min, x), max); }
 
-GV_FORCE_INLINE int gvMinu(unsigned int a, unsigned int b) { return a < b ? a : b; }
-GV_FORCE_INLINE int gvMaxu(unsigned int a, unsigned int b) { return a > b ? a : b; }
+GV_FORCE_INLINE unsigned int gvMinu(unsigned int a, unsigned int b) { return a < b ? a : b; }
+GV_FORCE_INLINE unsigned int gvMaxu(unsigned int a, unsigned int b) { return a > b ? a : b; }
+GV_FORCE_INLINE unsigned int gvClampu(unsigned int x, unsigned int min, unsigned int max) { return gvMinu(gvMaxu(min, x), max); }
 
 GV_FORCE_INLINE float gvMinf(float a, float b) { return a < b ? a : b; }
 GV_FORCE_INLINE float gvMaxf(float a, float b) { return a > b ? a : b; }
+GV_FORCE_INLINE float gvClampf(float x, float min, float max) { return gvMinf(gvMaxf(min, x), max); }
 
 GV_FORCE_INLINE long gvMinl(long a, long b) { return a < b ? a : b; }
 GV_FORCE_INLINE long gvMaxl(long a, long b) { return a > b ? a : b; }
+GV_FORCE_INLINE long gvClampl(long x, long min, long max) { return gvMin(gvMax(min, x), max); }
 
 GV_FORCE_INLINE char gvMinc(char a, char b) { return a < b ? a : b; }
 GV_FORCE_INLINE char gvMaxc(char a, char b) { return a > b ? a : b; }
+GV_FORCE_INLINE char gvClampc(char x, char min, char max) { return gvMin(gvMax(min, x), max); }
 
 
 /*
