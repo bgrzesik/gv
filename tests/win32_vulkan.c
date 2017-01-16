@@ -320,7 +320,7 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
     uint32_t queue_props_count = sizeof(queue_props) / sizeof(queue_props[0]);
     vkGetPhysicalDeviceQueueFamilyProperties(ctx->physical_device, &queue_props_count, queue_props);
 
-#define __HAS_FLAG(x, flag) ((x) & (flag) == (flag))
+#define __HAS_FLAG(x, flag) (((x) & (flag)) == (flag))
 #define __CHANGE(what, other1, other2, other3, to) (((what) == (other1) || (what) == (other2) || (what) == (other3)) && ((to) != (other1) && (to) != (other2) && (to) != (other3))) 
      
     for (i = 0; i < queue_props_count; i++) {
@@ -332,7 +332,7 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
         if ((cq == -1 || __CHANGE(cq, gq, tq, pq, i)) && __HAS_FLAG(qf, VK_QUEUE_COMPUTE_BIT))
             cq = i;
         
-        if ((tq == -1 || __CHANGE(tq, gq, cq, pq, i)) && __HAS_FLAG(qf, VK_QUEUE_COMPUTE_BIT))
+        if ((tq == -1 || __CHANGE(tq, gq, cq, pq, i)) && __HAS_FLAG(qf, VK_QUEUE_TRANSFER_BIT))
             tq = i;
 
         VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(ctx->physical_device, i, display->surface, &present_support));
@@ -343,10 +343,17 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
 #undef __CHANGE
 #undef __HAS_FLAG
 
+    /* I fucking love hard coding */
+
     VkDeviceQueueCreateInfo queue_cis[4] = { {0}, {0}, {0}, {0}, };
     uint32_t queue_count = 1;
 
     float queue_priorities[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    uint32_t gq_idx = 0;
+    uint32_t cq_idx = 0;
+    uint32_t tq_idx = 0;
+    uint32_t pq_idx = 0;
 
     queue_cis[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_cis[0].queueFamilyIndex = gq;
@@ -360,6 +367,7 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
         queue_cis[1].pQueuePriorities = queue_priorities;
         queue_count++;
     } else {
+        cq_idx = 1;
         queue_cis[0].queueCount = 2;
     }
 
@@ -370,8 +378,14 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
         queue_cis[queue_count].pQueuePriorities = queue_priorities;
         queue_count++;
     } else if (tq == gq) {
+        if (tq == cq) {
+            tq_idx = cq_idx + 1;
+        } else {
+            tq_idx = 1;
+        }
         queue_cis[0].queueCount++;
     } else if (tq == cq) {
+        tq_idx = 1;
         queue_cis[1].queueCount++;
     }
 
@@ -382,26 +396,39 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
         queue_cis[queue_count].pQueuePriorities = queue_priorities;
         queue_count++;
     } else if (pq == gq) {
+        if (pq == tq) {
+            pq_idx = tq_idx + 1;
+        } else if (pq == cq) {
+            pq_idx = cq_idx + 1;
+        } else {
+            pq_idx = 1;
+        }
         queue_cis[0].queueCount++;
     } else if (pq == cq) {
+        if (pq == tq) {
+            pq_idx = tq_idx + 1;
+        } else {
+            pq_idx = 1;
+        }
         queue_cis[1].queueCount++;
     } else if (pq == tq) {
         queue_cis[2].queueCount++;
+        pq_idx = 1;
     }
 
     VkDeviceCreateInfo device_ci = {0};
     device_ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_ci.queueCreateInfoCount = 1;
+    device_ci.queueCreateInfoCount = queue_count;
     device_ci.pQueueCreateInfos = queue_cis;
     device_ci.enabledExtensionCount = 1;
     device_ci.ppEnabledExtensionNames = (const char *[]) { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
     VK_CHECK(vkCreateDevice(ctx->physical_device, &device_ci, NULL, &ctx->device));
-
-    vkGetDeviceQueue(ctx->device, gq, gvMinu(0, queue_props[gq].queueCount - 1), &ctx->graphics_queue);
-    vkGetDeviceQueue(ctx->device, cq, gvMinu(1, queue_props[cq].queueCount - 1), &ctx->compute_queue);
-    vkGetDeviceQueue(ctx->device, tq, gvMinu(2, queue_props[tq].queueCount - 1), &ctx->transfer_queue);
-    vkGetDeviceQueue(ctx->device, pq, gvMinu(3, queue_props[pq].queueCount - 1), &ctx->present_queue);
+    
+    vkGetDeviceQueue(ctx->device, gq, gvMinu(gq_idx, queue_props[gq].queueCount - 1), &ctx->graphics_queue);
+    vkGetDeviceQueue(ctx->device, cq, gvMinu(cq_idx, queue_props[cq].queueCount - 1), &ctx->compute_queue);
+    vkGetDeviceQueue(ctx->device, tq, gvMinu(tq_idx, queue_props[tq].queueCount - 1), &ctx->transfer_queue);
+    vkGetDeviceQueue(ctx->device, pq, gvMinu(pq_idx, queue_props[pq].queueCount - 1), &ctx->present_queue);
 
     ctx->graphics_family = gq;
     ctx->compute_family = cq;
@@ -541,6 +568,8 @@ void gvVkDisplayInit(struct gvVkDisplay *display, struct gvVkContext *ctx, struc
 }
 
 void gvVkDisplayDestroy(struct gvVkDisplay *display) {
+    vkDestroyImage(display->ctx->device, display->depth_img, NULL);
+
     uint32_t i;
     for (i = 0; i < display->swapchain_image_count; i++) {
         vkDestroyImageView(display->ctx->device, display->swapchain_image_views[i], NULL);
