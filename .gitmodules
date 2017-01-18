@@ -4,3 +4,6 @@
 [submodule "3rdparty/stb"]
 	path = 3rdparty/stb
 	url = https://github.com/nothings/stb
+[submodule "3rdparty/mmx"]
+	path = 3rdparty/mmx
+	url = https://github.com/vurtun/mmx

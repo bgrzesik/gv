@@ -5,6 +5,11 @@
 #include <wtypes.h>
 #include <stdint.h>
 
+#define MMX_IMPLEMENTATION
+#define MMX_USE_DEGREES
+#define MMX_STATIC
+#include <mmx/vec.h>
+
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 #pragma comment(lib, "vulkan-1.lib")
@@ -20,7 +25,6 @@
 GV_STATIC_ASSERT(NULL == 0);
 
 #define VK_CHECK(...) do { VkResult result = (__VA_ARGS__); if (result != VK_SUCCESS) { __debugbreak(); assert(0 && "vulkan error"); } } while (0)
-
 
 struct gvWindow {
     HINSTANCE hinstance;
@@ -52,6 +56,8 @@ struct gvVkContext {
 
     VkQueue present_queue;
     uint32_t present_family;
+
+    VkPhysicalDeviceMemoryProperties mem_props;
 };
 
 struct gvVkDisplay {
@@ -68,6 +74,7 @@ struct gvVkDisplay {
     VkImageView swapchain_image_views[8];
 
     VkImage depth_img;
+    VkDeviceMemory depth_img_mem;
     VkImageView depth_img_view;
 };
 
@@ -89,15 +96,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 
     case WM_SYSCOMMAND:
         switch (wparam) {
-        case SC_MINIMIZE:
-            window->visible = 0;
-            break;
-        case SC_RESTORE:
-            window->visible = 1;
-            break;
-        case SC_CLOSE:
-            window->should_close = 1;
-            break;
+            case SC_MINIMIZE:
+                window->visible = 0;
+                break;
+            case SC_RESTORE:
+                window->visible = 1;
+                break;
+            case SC_CLOSE:
+                window->should_close = 1;
+                break;
         }
         break;
 
@@ -158,11 +165,10 @@ void gvWindowInit(struct gvWindow *window, HINSTANCE hinstance, int cmd_show) {
     window->width = rect.right - rect.left;
     window->height = rect.bottom - rect.top;
 
-    int pf;
-    PIXELFORMATDESCRIPTOR pfd;
 
     window->hdc = GetDC(window->hwnd);
 
+    PIXELFORMATDESCRIPTOR pfd;
     ZeroMemory(&pfd, sizeof(pfd));
     pfd.nSize = sizeof(pfd);
     pfd.nVersion = 1;
@@ -170,7 +176,7 @@ void gvWindowInit(struct gvWindow *window, HINSTANCE hinstance, int cmd_show) {
     pfd.iPixelType = PFD_TYPE_RGBA;
     pfd.cColorBits = 32;
 
-    pf = ChoosePixelFormat(window->hdc, &pfd);
+    int pf = ChoosePixelFormat(window->hdc, &pfd);
     SetPixelFormat(window->hdc, pf, &pfd);
     DescribePixelFormat(window->hdc, pf, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
 
@@ -295,6 +301,8 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
     }
 
     ctx->physical_device = devices[0];
+
+    vkGetPhysicalDeviceMemoryProperties(ctx->physical_device, &ctx->mem_props);
 
 #if 0 /* it seems that Vulkan can run even if driver version doesn't match sdk version */
     VkPhysicalDeviceProperties device_props = {0};
@@ -425,10 +433,10 @@ void gvVkContextInit(struct gvVkContext *ctx, struct gvVkDisplay *display, struc
 
     VK_CHECK(vkCreateDevice(ctx->physical_device, &device_ci, NULL, &ctx->device));
     
-    vkGetDeviceQueue(ctx->device, gq, gvMinu(gq_idx, queue_props[gq].queueCount - 1), &ctx->graphics_queue);
-    vkGetDeviceQueue(ctx->device, cq, gvMinu(cq_idx, queue_props[cq].queueCount - 1), &ctx->compute_queue);
-    vkGetDeviceQueue(ctx->device, tq, gvMinu(tq_idx, queue_props[tq].queueCount - 1), &ctx->transfer_queue);
-    vkGetDeviceQueue(ctx->device, pq, gvMinu(pq_idx, queue_props[pq].queueCount - 1), &ctx->present_queue);
+    if (gq != -1) vkGetDeviceQueue(ctx->device, gq, gvMinu(gq_idx, queue_props[gq].queueCount - 1), &ctx->graphics_queue);
+    if (cq != -1) vkGetDeviceQueue(ctx->device, cq, gvMinu(cq_idx, queue_props[cq].queueCount - 1), &ctx->compute_queue);
+    if (tq != -1) vkGetDeviceQueue(ctx->device, tq, gvMinu(tq_idx, queue_props[tq].queueCount - 1), &ctx->transfer_queue);
+    if (pq != -1) vkGetDeviceQueue(ctx->device, pq, gvMinu(pq_idx, queue_props[pq].queueCount - 1), &ctx->present_queue);
 
     ctx->graphics_family = gq;
     ctx->compute_family = cq;
@@ -444,6 +452,19 @@ void gvVkContextDestroy(struct gvVkContext *ctx) {
     vkDestroyInstance(ctx->instance, NULL);
 }
 
+int pickMemoryType(struct gvVkContext *ctx, uint32_t typeBits, VkFlags requirements, uint32_t *typeIndex) {
+    uint32_t i;
+    for (i = 0; i < ctx->mem_props.memoryTypeCount; i++) {
+        if ((typeBits & 1) == 1) {
+            if ((ctx->mem_props.memoryTypes[i].propertyFlags & requirements) == requirements) {
+                *typeIndex = i;
+                return 1;
+            }
+        }
+        typeBits >>= 1;
+    }
+    return 0;
+}
 
 void gvVkDisplayInit(struct gvVkDisplay *display, struct gvVkContext *ctx, struct gvWindow *window) {
     display->ctx = ctx;
@@ -565,9 +586,36 @@ void gvVkDisplayInit(struct gvVkDisplay *display, struct gvVkContext *ctx, struc
     VkMemoryAllocateInfo mem_alloc = {0};
     mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mem_alloc.allocationSize = mem_reqs.size;
+
+    if (!pickMemoryType(ctx, mem_reqs.memoryTypeBits, 0, &mem_alloc.memoryTypeIndex)) {
+        MessageBoxA(NULL, "Unable to find suitable memory for depth image", "Error!", MB_OK | MB_ICONERROR);
+        ExitProcess(12);
+    }
+
+    VK_CHECK(vkAllocateMemory(ctx->device, &mem_alloc, NULL, &display->depth_img_mem));
+    VK_CHECK(vkBindImageMemory(ctx->device, display->depth_img, display->depth_img_mem, 0));
+
+    VkImageViewCreateInfo depth_img_view_ci = {0};
+    depth_img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    depth_img_view_ci.image = display->depth_img;
+    depth_img_view_ci.format = VK_FORMAT_D16_UNORM;
+    depth_img_view_ci.components.r = VK_COMPONENT_SWIZZLE_R;
+    depth_img_view_ci.components.g = VK_COMPONENT_SWIZZLE_G;
+    depth_img_view_ci.components.b = VK_COMPONENT_SWIZZLE_B;
+    depth_img_view_ci.components.a = VK_COMPONENT_SWIZZLE_A;
+    depth_img_view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depth_img_view_ci.subresourceRange.baseMipLevel = 0;
+    depth_img_view_ci.subresourceRange.levelCount = 1;
+    depth_img_view_ci.subresourceRange.baseArrayLayer = 0;
+    depth_img_view_ci.subresourceRange.layerCount = 1;
+    depth_img_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+
+    VK_CHECK(vkCreateImageView(ctx->device, &depth_img_view_ci, NULL, &display->depth_img_view));
 }
 
 void gvVkDisplayDestroy(struct gvVkDisplay *display) {
+    vkDestroyImageView(display->ctx->device, display->depth_img_view, NULL);
+    vkFreeMemory(display->ctx->device, display->depth_img_mem, NULL);
     vkDestroyImage(display->ctx->device, display->depth_img, NULL);
 
     uint32_t i;

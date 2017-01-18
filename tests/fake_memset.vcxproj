@@ -74,25 +74,25 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath);$(SolutionDir)..\3rdparty\</IncludePath>
     <LibraryPath>$(VULKAN_SDK)\Source\lib32;$(ProjectDir)..\3rdparty\glew\lib\Release\$(PlatformName);$(ProjectDir)..\3rdparty\glfw\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)$(Configuration)\$(ProjectName)</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath);$(SolutionDir)..\3rdparty\</IncludePath>
     <LibraryPath>$(VULKAN_SDK)\Source\lib;$(ProjectDir)..\3rdparty\glew\lib\Release\$(PlatformName);$(ProjectDir)..\3rdparty\glfw\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath);$(SolutionDir)..\3rdparty\</IncludePath>
     <LibraryPath>$(VULKAN_SDK)\Source\lib32;$(ProjectDir)..\3rdparty\glew\lib\Release\$(PlatformName);$(ProjectDir)..\3rdparty\glfw\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)$(Configuration)\$(ProjectName)</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath)</IncludePath>
+    <IncludePath>$(VC_VC_IncludePath);$(ProjectDir)..;$(ProjectDir)..\3rdparty\stb;$(ProjectDir)..\3rdparty\glfw\include;$(ProjectDir)..\3rdparty\glew\include;$(ProjectDir)..\3rdparty\nuklear;$(VULKAN_SDK)\include;$(IncludePath);$(SolutionDir)..\3rdparty\</IncludePath>
     <LibraryPath>$(VULKAN_SDK)\Source\lib;$(ProjectDir)..\3rdparty\glew\lib\Release\$(PlatformName);$(ProjectDir)..\3rdparty\glfw\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)</OutDir>
   </PropertyGroup>
