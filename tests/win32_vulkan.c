@@ -41,6 +41,12 @@ typedef struct Vertex {
             float x, y, z, w;
         };
     };
+	union {
+		float tex_coord[2];
+		struct {
+			float u, v;
+		};
+	};
     union {
         float col[4]; 
         struct {
@@ -50,10 +56,10 @@ typedef struct Vertex {
 } Vertex;
 
 static const Vertex vertecies[] = {
-    {  0.5f,  0.5f, 0.0f, 1.0f,   0.0f, 0.0f, 1.0f, 1.0f, },
-    { -0.5f,  0.5f, 0.0f, 1.0f,   0.0f, 1.0f, 0.0f, 1.0f, },
-    { -0.5f, -0.5f, 0.0f, 1.0f,   1.0f, 0.0f, 0.0f, 1.0f, },
-    {  0.5f, -0.5f, 0.0f, 1.0f,   1.0f, 1.0f, 1.0f, 0.0f, },
+    {  0.5f,  0.5f, 0.0f, 1.0f,   0.0f, 0.0f,   0.0f, 0.0f, 1.0f, 1.0f, },
+    { -0.5f,  0.5f, 0.0f, 1.0f,   0.5f, 0.0f,   0.0f, 1.0f, 0.0f, 1.0f, },
+    { -0.5f, -0.5f, 0.0f, 1.0f,   0.5f, 0.5f,   1.0f, 0.0f, 0.0f, 1.0f, },
+    {  0.5f, -0.5f, 0.0f, 1.0f,   0.0f, 0.5f,   1.0f, 1.0f, 1.0f, 0.0f, },
 };
 
 static const uint16_t indices[] = {
@@ -174,47 +180,47 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 
     switch (msg) {
 
-    case WM_CLOSE:
-        window->should_close = 1;
-        PostQuitMessage(0);
-        return 0;
+		case WM_CLOSE:
+			window->should_close = 1;
+			PostQuitMessage(0);
+			return 0;
 
-    case WM_SYSCOMMAND:
-        switch (wparam) {
-            case SC_MINIMIZE:
-                window->visible = 0;
-                break;
-            case SC_RESTORE:
-                window->visible = 1;
-                break;
-            case SC_CLOSE:
-                window->should_close = 1;
-                break;
-        }
-        break;
+		case WM_SYSCOMMAND:
+			switch (wparam) {
+				case SC_MINIMIZE:
+					window->visible = 0;
+					break;
+				case SC_RESTORE:
+					window->visible = 1;
+					break;
+				case SC_CLOSE:
+					window->should_close = 1;
+					break;
+			}
+			break;
 
-    case WM_KEYDOWN:
-        switch (wparam) {
-            case VK_ESCAPE:
-                window->should_close = 1;
-                return 0;
-        }
-        break;
+		case WM_KEYDOWN:
+			switch (wparam) {
+				case VK_ESCAPE:
+					window->should_close = 1;
+					return 0;
+			}
+			break;
 
-    case WM_PAINT:
-        if (window->curr_layer) {
-            gvVkLayerRender(window->curr_layer);
-        }
-        BeginPaint(hwnd, &ps);
-        EndPaint(hwnd, &ps);
-        return 0;
+		case WM_PAINT:
+			if (window->curr_layer) {
+				gvVkLayerRender(window->curr_layer);
+			}
+			BeginPaint(hwnd, &ps);
+			EndPaint(hwnd, &ps);
+			return 0;
 
-    case WM_SIZE:
-        window->width = LOWORD(lparam);
-        window->height = HIWORD(lparam);
-        gvVkDisplayRecreateSwapchain(window->curr_layer->display, window->curr_layer->ctx, window);
-        PostMessageA(hwnd, WM_PAINT, 0, 0);
-        return 0;
+		case WM_SIZE:
+			window->width = LOWORD(lparam);
+			window->height = HIWORD(lparam);
+			gvVkDisplayRecreateSwapchain(window->curr_layer->display, window->curr_layer->ctx, window);
+			PostMessageA(hwnd, WM_PAINT, 0, 0);
+			return 0;
 
     }
     return DefWindowProcA(hwnd, msg, wparam, lparam);
@@ -317,7 +323,7 @@ static VkBool32 VKAPI_PTR debugCallback(VkDebugReportFlagsEXT f, VkDebugReportOb
     OutputDebugStringA("\n");
 
     if ((f & VK_DEBUG_REPORT_ERROR_BIT_EXT) == VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-        __debugbreak();
+		__debugbreak();
     }
 
     return VK_SUCCESS;
@@ -936,15 +942,85 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     writes[0].dstArrayElement = 0;
     writes[0].dstBinding = 0;
 
-
+	int width, height, comp;
+	char *img_data = stbi_load("avatar.jpg", &width, &height, &comp, 4);
 
     VkImageCreateInfo img_ci = {0};
     img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	img_ci.extent.width = width;
+	img_ci.extent.height = height;
+	img_ci.extent.depth = 1.0f;
+	img_ci.imageType = VK_IMAGE_TYPE_2D;
+	img_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+	img_ci.mipLevels = 1;
+	img_ci.arrayLayers = 1;
+	img_ci.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	img_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+	img_ci.tiling = VK_IMAGE_TILING_LINEAR;
+	img_ci.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+	img_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+	VK_CHECK(vkCreateImage(ctx->device, &img_ci, NULL, &layer->img));
+
+	vkGetImageMemoryRequirements(ctx->device, layer->img, &mem_reqs);
+
+	VkMemoryAllocateInfo mem_ai = {0};
+	mem_ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	mem_ai.allocationSize = mem_reqs.size;
+
+	if (!pickMemoryType(ctx, mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, &mem_ai.memoryTypeIndex)) {
+        MessageBoxA(NULL, "Unable to find suitable memory for vertex buffer", "Error!", MB_OK | MB_ICONERROR);
+        ExitProcess(12);
+	}
+
+	VK_CHECK(vkAllocateMemory(ctx->device, &mem_ai, NULL, &layer->img_mem));
+	
+	void *img_data_ptr;
+	VK_CHECK(vkMapMemory(ctx->device, layer->img_mem, 0, mem_ai.allocationSize, 0, &img_data_ptr));
+	memcpy(img_data_ptr, img_data, width * height * 4);
+	vkUnmapMemory(ctx->device, layer->img_mem);
+
+	VK_CHECK(vkBindImageMemory(ctx->device, layer->img, layer->img_mem, 0));
+
+	VkImageViewCreateInfo img_view_ci = {0};
+	img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	img_view_ci.image = layer->img;
+	img_view_ci.components.r = VK_COMPONENT_SWIZZLE_R;
+	img_view_ci.components.b = VK_COMPONENT_SWIZZLE_B;
+	img_view_ci.components.g = VK_COMPONENT_SWIZZLE_G;
+	img_view_ci.components.a = VK_COMPONENT_SWIZZLE_A;
+	img_view_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+	img_view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	img_view_ci.subresourceRange.baseArrayLayer = 0;
+	img_view_ci.subresourceRange.baseMipLevel = 0;
+	img_view_ci.subresourceRange.layerCount = 1;
+	img_view_ci.subresourceRange.levelCount = 1;
+	
+	VK_CHECK(vkCreateImageView(ctx->device, &img_view_ci, NULL, &layer->img_view));
+	
+	VkSamplerCreateInfo sampler_ci = {0};
+	sampler_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler_ci.magFilter = VK_FILTER_NEAREST;
+    sampler_ci.minFilter = VK_FILTER_NEAREST;
+    sampler_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_ci.mipLodBias = 0.0f;
+    sampler_ci.anisotropyEnable = VK_FALSE,
+    sampler_ci.maxAnisotropy = 0;
+    sampler_ci.compareOp = VK_COMPARE_OP_NEVER;
+    sampler_ci.minLod = 0.0f;
+    sampler_ci.maxLod = 0.0f;
+    sampler_ci.compareEnable = VK_FALSE;
+    sampler_ci.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;	
+
+	VK_CHECK(vkCreateSampler(ctx->device, &sampler_ci, NULL, &layer->sampler));
 
     VkDescriptorImageInfo img_info = {0};
     img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
+	img_info.imageView = layer->img_view;
+	img_info.sampler = layer->sampler;
 
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[1].dstSet = layer->desc_set;
@@ -1081,22 +1157,27 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     vbinding.binding = VK_VERTEX_INPUT_RATE_VERTEX;
     vbinding.stride = sizeof(Vertex);
 
-    VkVertexInputAttributeDescription vattrs[2] = { {0}, {0} };
+	VkVertexInputAttributeDescription vattrs[3] = { {0}, {0}, {0} };
     vattrs[0].binding = 0;
     vattrs[0].location = 0;
     vattrs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
     vattrs[0].offset = GV_OFFSETOF(Vertex, pos[0]);
-
+	
     vattrs[1].binding = 0;
     vattrs[1].location = 1;
-    vattrs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    vattrs[1].offset = GV_OFFSETOF(Vertex, col[0]);
+    vattrs[1].format = VK_FORMAT_R32G32_SFLOAT;
+    vattrs[1].offset = GV_OFFSETOF(Vertex, tex_coord[0]);
+
+    vattrs[2].binding = 0;
+    vattrs[2].location = 2;
+    vattrs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    vattrs[2].offset = GV_OFFSETOF(Vertex, col[0]);
 
     VkPipelineVertexInputStateCreateInfo vi = {0};
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount = 1;
     vi.pVertexBindingDescriptions = &vbinding;
-    vi.vertexAttributeDescriptionCount = 2;
+    vi.vertexAttributeDescriptionCount = 3;
     vi.pVertexAttributeDescriptions = vattrs;
 
     VkPipelineInputAssemblyStateCreateInfo ia = {0};
@@ -1283,6 +1364,10 @@ GV_API void gvVkLayerRender(GvVkLayer *layer) {
 }
 
 GV_API void gvVkLayerDestroy(GvVkLayer *layer) {
+	vkDestroyImageView(layer->ctx->device, layer->img_view, NULL);
+	vkDestroyImage(layer->ctx->device, layer->img, NULL);
+	vkDestroySampler(layer->ctx->device, layer->sampler, NULL);
+
     vkDestroyFence(layer->ctx->device, layer->fence, NULL);
 
     vkDestroyPipeline(layer->ctx->device, layer->pipeline, NULL);
