@@ -7,11 +7,13 @@ ABOUT:
 
 TODOS:
     - TODO add more functions to gv socket.
-    - TODO consider moving to camel case naming convention.
 
 NOTES:
     In some macros there are sometimes semi-colons (they shouldn't be there),
     this is due to some problems of Visual Studio Code.
+
+DEFINE:
+    GV_IMPLEMENTATION - to define functions
 
 AUTHOR:
     Bartłomiej Grzesik
@@ -173,6 +175,9 @@ extern "C" {
 #define GV_CONSTRUCTOR(fn) static void __attribute__ ((unused, constructor)) fn(void)
 #endif  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
 
+#ifndef GV_OFFSETOF
+#define GV_OFFSETOF(type, member) (&((type *) (void *) 0)->member)
+#endif
 
 /*
     MEMORY
@@ -256,7 +261,7 @@ GV_API void  gvDLClose(void *lib);
     SOCKET
  */
 #ifdef _WIN32
-typedef SOCKET GvSocket_t;
+typedef SOCKET GvSocket;
 
 #ifndef GVSOCK_INVALID
 #define GVSOCK_INVALID INVALID_SOCKET
@@ -270,7 +275,7 @@ enum {
 };
 
 #else /* _WIN32 */
-typedef int GvSocket_t;
+typedef int GvSocket;
 
 #ifndef GVSOCK_INVALID
 #define GVSOCK_INVALID (-1)
@@ -284,7 +289,7 @@ enum {
 };
 #endif /* _WIN32 */
 
-GV_API void      gvSocketClose(GvSocket_t socket);
+GV_API void      gvSocketClose(GvSocket socket);
 GV_API int       gvSockStartup(void);
 GV_API void      gvSockCleanup(void);
 
@@ -294,8 +299,8 @@ GV_API void      gvSockCleanup(void);
  */
 #ifdef _WIN32
 
-typedef HANDLE GvThread_t;
-typedef DWORD (WINAPI *GvThreadFN_t)(void *);
+typedef HANDLE GvThread;
+typedef DWORD (WINAPI *GvThreadFN)(void *);
 
 #ifndef GV_THREAD_FN
 #define GV_THREAD_FN(name, param) DWORD WINAPI name(void *param)
@@ -307,8 +312,8 @@ typedef DWORD (WINAPI *GvThreadFN_t)(void *);
 
 #else /* _WIN32 */
 
-typedef pthread_t GvThread_t;
-typedef void *(*GvThreadFN_t)(void *);
+typedef pthread_t GvThread;
+typedef void *(*GvThreadFN)(void *);
 
 #ifndef GV_THREAD_FN
 #define GV_THREAD_FN(name, param) void *name(void *param)
@@ -320,24 +325,24 @@ typedef void *(*GvThreadFN_t)(void *);
 
 #endif
 
-GV_API int      gvThreadInit(GvThread_t *th, GvThreadFN_t fn, void *param);
-GV_API int      gvThreadJoin(GvThread_t *th);
+GV_API int      gvThreadInit(GvThread *th, GvThreadFN fn, void *param);
+GV_API int      gvThreadJoin(GvThread *th);
 
 
 /*
     MUTEX
  */
 #ifdef _WIN32
-typedef CRITICAL_SECTION gvMutex_t;
+typedef CRITICAL_SECTION GvMutex;
 #else
-typedef pthread_mutex_t gvMutex_t;
+typedef pthread_mutex_t GvMutex;
 #endif
 
-GV_API void      gvMutexInit(gvMutex_t *mutex);
-GV_API void      gvMutexDestroy(gvMutex_t *mutex);
-GV_API void      gvMutexLock(gvMutex_t *mutex);
-GV_API void      gvMutexUnlock(gvMutex_t *mutex);
-GV_API int       gvMutexTryLock(gvMutex_t *mutex);
+GV_API void      gvMutexInit(GvMutex *mutex);
+GV_API void      gvMutexDestroy(GvMutex *mutex);
+GV_API void      gvMutexLock(GvMutex *mutex);
+GV_API void      gvMutexUnlock(GvMutex *mutex);
+GV_API int       gvMutexTryLock(GvMutex *mutex);
 
 
 /*
@@ -352,54 +357,54 @@ GV_API void *gvAtomicCmpXchgv(void *volatile *dst, void *const xchg, void *const
     CONDITION VARIABLE
  */
 #ifdef _WIN32
-typedef CONDITION_VARIABLE GvCondVar_t;
+typedef CONDITION_VARIABLE GvCondVar;
 #else
-typedef pthread_cond_t GvCondVar_t;
+typedef pthread_cond_t GvCondVar;
 #endif
 
-GV_API int      gvCondVarInit(GvCondVar_t *cond);
-GV_API int      gvCondVarDestroy(GvCondVar_t *cond);
-GV_API int      gvCondVarWait(GvCondVar_t *cond, gvMutex_t *mutex);
-GV_API int      gvCondVarNotify(GvCondVar_t *cond);
-GV_API int      gvCondVarNotifyAll(GvCondVar_t *cond);
+GV_API int      gvCondVarInit(GvCondVar *cond);
+GV_API int      gvCondVarDestroy(GvCondVar *cond);
+GV_API int      gvCondVarWait(GvCondVar *cond, GvMutex *mutex);
+GV_API int      gvCondVarNotify(GvCondVar *cond);
+GV_API int      gvCondVarNotifyAll(GvCondVar *cond);
 
 
 /*
     EVENT
  */
 #ifdef _WIN32
-struct GvEvent {
+typedef struct GvEvent {
     HANDLE event;
     volatile long waiters;
-};
+} GvEvent;
 #else   /* _WIN32 */
-struct GvEvent {
+typedef struct GvEvent {
     pthread_cond_t cond;
     pthread_mutex_t mut;
-};
+} GvEvent;
 #endif  /* _WIN32 */
 
-GV_API int     gvEventInit(struct GvEvent *event);
-GV_API int     gvEventWait(struct GvEvent *event);
-GV_API int     gvEventNotify(struct GvEvent *event);
-GV_API int     gvEventDestroy(struct GvEvent *event);
+GV_API int     gvEventInit(GvEvent *event);
+GV_API int     gvEventWait(GvEvent *event);
+GV_API int     gvEventNotify(GvEvent *event);
+GV_API int     gvEventDestroy(GvEvent *event);
 
 
 /*
     THREAD POOL
  */
-struct GvThreadTask {
-    GvThreadFN_t            fn;
+typedef struct GvThreadTask {
+    GvThreadFN            fn;
     void                    *param;
     struct GvThreadTask    *next;
-};
+} GvThreadTask;
 
-struct GvThreadPool {
+typedef struct GvThreadPool {
     struct GvThreadTask *volatile front;
     struct GvThreadTask *volatile rear;
 
-    GvCondVar_t supervisor;
-    gvMutex_t guard;
+    GvCondVar supervisor;
+    GvMutex guard;
 
     int is_working;
     size_t num_workers;
@@ -407,8 +412,8 @@ struct GvThreadPool {
 
     struct GvEvent ready_done;
 
-    GvThread_t *workers;
-};
+    GvThread *workers;
+} GvThreadPool;
 
 #if defined(_WIN32) && !defined(GV_THREAD_POOL_TASK_RETURN)
 #define GV_THREAD_POOL_TASK_RETURN() return 0;
@@ -416,9 +421,9 @@ struct GvThreadPool {
 #define GV_THREAD_POOL_TASK_RETURN() return NULL;
 #endif
 
-GV_API void gvThreadPoolInit(struct GvThreadPool *pool, size_t num_workers, GvThread_t *workers);
-GV_API void gvThreadPoolSchedule(struct GvThreadPool *pool, struct GvThreadTask *task, GvThreadFN_t func, void *param);
-GV_API void gvThreadPoolDestroy(struct GvThreadPool *pool);
+GV_API void gvThreadPoolInit(GvThreadPool *pool, size_t num_workers, GvThread *workers);
+GV_API void gvThreadPoolSchedule(GvThreadPool *pool, struct GvThreadTask *task, GvThreadFN func, void *param);
+GV_API void gvThreadPoolDestroy(GvThreadPool *pool);
 
 
 #endif  /* __GV_H__ */
@@ -467,7 +472,7 @@ GV_API void gvDLClose(void *lib) {
  */
 #ifdef _WIN32
 
-GV_API void gvSocketClose(GvSocket_t socket) {
+GV_API void gvSocketClose(GvSocket socket) {
     closesocket(socket);
 }
 
@@ -493,7 +498,7 @@ GV_CONSTRUCTOR(gvSock_sockConstructor) {
 
 #else /* _WIN32 */
 
-GV_API void gvSocketClose(GvSocket_t socket) {
+GV_API void gvSocketClose(GvSocket socket) {
     close(socket);
 }
 
@@ -511,22 +516,22 @@ GV_API void gvSockCleanup(void) {
  */
 #ifdef _WIN32
 
-GV_API int gvThreadInit(GvThread_t *th, GvThreadFN_t fn, void *param) {
+GV_API int gvThreadInit(GvThread *th, GvThreadFN fn, void *param) {
     *th = CreateThread(NULL, 0, fn, param, 0, NULL);
     return !!th;
 }
 
-GV_API int gvThreadJoin(GvThread_t *th) {
+GV_API int gvThreadJoin(GvThread *th) {
     return WaitForSingleObject(*th, INFINITE);
 }
 
 #else   /* _WIN32 */
 
-GV_API int gvThreadInit(GvThread_t *th, GvThreadFN_t fn, void *param) {
+GV_API int gvThreadInit(GvThread *th, GvThreadFN fn, void *param) {
     return pthread_create(th, NULL, fn, param) == 0;
 }
 
-GV_API int gvThreadJoin(GvThread_t *th) {
+GV_API int gvThreadJoin(GvThread *th) {
     return pthread_join(*th, NULL);
 }
 
@@ -537,46 +542,46 @@ GV_API int gvThreadJoin(GvThread_t *th) {
  */
 #ifdef _WIN32
 
-GV_API void gvMutexInit(gvMutex_t *mutex) {
+GV_API void gvMutexInit(GvMutex *mutex) {
     gv_memset(mutex, 0, sizeof(*mutex));
     InitializeCriticalSection(mutex);
 }
 
-GV_API void gvMutexDestroy(gvMutex_t *mutex) {
+GV_API void gvMutexDestroy(GvMutex *mutex) {
     DeleteCriticalSection(mutex);
 }
 
-GV_API void gvMutexLock(gvMutex_t *mutex) {
+GV_API void gvMutexLock(GvMutex *mutex) {
     EnterCriticalSection(mutex);
 }
 
-GV_API void gvMutexUnlock(gvMutex_t *mutex) {
+GV_API void gvMutexUnlock(GvMutex *mutex) {
     LeaveCriticalSection(mutex);
 }
 
-GV_API int gvMutexTryLock(gvMutex_t *mutex) {
+GV_API int gvMutexTryLock(GvMutex *mutex) {
     return TryEnterCriticalSection(mutex);
 }
 
 #else   /* _WIN32 */
 
-GV_API void gvMutexInit(gvMutex_t *mutex) {
+GV_API void gvMutexInit(GvMutex *mutex) {
     pthread_mutex_init(mutex, NULL);
 }
 
-GV_API void gvMutexDestroy(gvMutex_t *mutex) {
+GV_API void gvMutexDestroy(GvMutex *mutex) {
     pthread_mutex_destroy(mutex);
 }
 
-GV_API void gvMutexLock(gvMutex_t *mutex) {
+GV_API void gvMutexLock(GvMutex *mutex) {
     pthread_mutex_lock(mutex);
 }
 
-GV_API void gvMutexUnlock(gvMutex_t *mutex) {
+GV_API void gvMutexUnlock(GvMutex *mutex) {
     pthread_mutex_unlock(mutex);
 }
 
-GV_API int gvMutexTryLock(gvMutex_t *mutex) {
+GV_API int gvMutexTryLock(GvMutex *mutex) {
     return pthread_mutex_unlock(mutex) == 0;
 }
 
@@ -622,48 +627,48 @@ GV_API void *gvAtomicCmpXchgv(void *volatile *dst, void *const xchg, void *const
  */
 #ifdef _WIN32
 
-GV_API int gvCondVarInit(GvCondVar_t *cond) {
+GV_API int gvCondVarInit(GvCondVar *cond) {
     InitializeConditionVariable(cond);
     return GV_TRUE;
 }
 
-GV_API int gvCondVarDestroy(GvCondVar_t *cond) {
+GV_API int gvCondVarDestroy(GvCondVar *cond) {
     return GV_TRUE;
 }
 
-GV_API int gvCondVarWait(GvCondVar_t *cond, gvMutex_t *mutex) {
+GV_API int gvCondVarWait(GvCondVar *cond, GvMutex *mutex) {
     return SleepConditionVariableCS(cond, mutex, INFINITE);
 }
 
-GV_API int gvCondVarNotify(GvCondVar_t *cond) {
+GV_API int gvCondVarNotify(GvCondVar *cond) {
     WakeConditionVariable(cond);
     return GV_TRUE;
 }
 
-GV_API int gvCondVarNotifyAll(GvCondVar_t *cond) {
+GV_API int gvCondVarNotifyAll(GvCondVar *cond) {
     WakeAllConditionVariable(cond);
     return GV_TRUE;
 }
 
 #else   /* _WIN32 */
 
-GV_API int gvCondVarInit(GvCondVar_t *cond) {
+GV_API int gvCondVarInit(GvCondVar *cond) {
     return pthread_cond_init(cond, NULL) == 0;
 }
 
-GV_API int gvCondVarDestroy(GvCondVar_t *cond) {
+GV_API int gvCondVarDestroy(GvCondVar *cond) {
     return pthread_cond_destroy(cond) == 0;
 }
 
-GV_API int gvCondVarWait(GvCondVar_t *cond, gvMutex_t *mutex) {
+GV_API int gvCondVarWait(GvCondVar *cond, GvMutex *mutex) {
     return pthread_cond_wait(cond, mutex) == 0;
 }
 
-GV_API int gvCondVarNotify(GvCondVar_t *cond) {
+GV_API int gvCondVarNotify(GvCondVar *cond) {
     return pthread_cond_signal(cond) == 0;
 }
 
-GV_API int gvCondVarNotifyAll(GvCondVar_t *cond) {
+GV_API int gvCondVarNotifyAll(GvCondVar *cond) {
     return pthread_cond_broadcast(cond) == 0;
 }
 
@@ -675,12 +680,12 @@ GV_API int gvCondVarNotifyAll(GvCondVar_t *cond) {
  */
 #ifdef _WIN32
 
-GV_API int  gvEventInit(struct GvEvent *event) {
+GV_API int  gvEventInit(GvEvent *event) {
     event->waiters = 0;
-    return (event->event = CreateEvent(NULL, TRUE, FALSE, NULL)) != NULL;
+    return (event->event = CreateEventA(NULL, TRUE, FALSE, NULL)) != NULL;
 }
 
-GV_API int  gvEventWait(struct GvEvent *event) {
+GV_API int  gvEventWait(GvEvent *event) {
     long last;
 
     _InterlockedExchangeAdd(&event->waiters, 1);
@@ -694,25 +699,25 @@ GV_API int  gvEventWait(struct GvEvent *event) {
     return GV_TRUE;
 }
 
-GV_API int  gvEventNotify(struct GvEvent *event) {
+GV_API int  gvEventNotify(GvEvent *event) {
     return SetEvent(event->event);
 }
 
-GV_API int  gvEventDestroy(struct GvEvent *event) {
+GV_API int  gvEventDestroy(GvEvent *event) {
     return CloseHandle(event->event);
 }
 
 
 #else   /* _WIN32 */
 
-GV_API int  gvEventInit(struct GvEvent *event) {
+GV_API int  gvEventInit(GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_init(&event->mut, NULL);
     res |= pthread_cond_init(&event->cond, NULL);
     return res;
 }
 
-GV_API int  gvEventWait(struct GvEvent *event) {
+GV_API int  gvEventWait(GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_lock(&event->mut);
     res |= pthread_cond_wait(&event->cond, &event->mut);
@@ -720,7 +725,7 @@ GV_API int  gvEventWait(struct GvEvent *event) {
     return res == 0;
 }
 
-GV_API int  gvEventNotify(struct GvEvent *event) {
+GV_API int  gvEventNotify(GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_lock(&event->mut);
     res |= pthread_cond_broadcast(&event->cond);
@@ -728,7 +733,7 @@ GV_API int  gvEventNotify(struct GvEvent *event) {
     return res == 0;
 }
 
-GV_API int  gvEventDestroy(struct GvEvent *event) {
+GV_API int  gvEventDestroy(GvEvent *event) {
     int res = 0;
     res |= pthread_mutex_destroy(&event->mut);
     res |= pthread_cond_destroy(&event->cond);
@@ -786,7 +791,7 @@ GV_THREAD_FN(gvThreadPool_func, param) {
     GV_THREAD_RETURN();
 }
 
-GV_API void gvThreadPoolInit(struct GvThreadPool *pool, size_t num_workers, GvThread_t*workers) {
+GV_API void gvThreadPoolInit(GvThreadPool *pool, size_t num_workers, GvThread*workers) {
     gv_memset(pool, 0, sizeof(*pool)); /* undefined behavior happens without this */
 
     pool->rear = NULL;
@@ -807,7 +812,7 @@ GV_API void gvThreadPoolInit(struct GvThreadPool *pool, size_t num_workers, GvTh
     gvEventWait(&pool->ready_done);
 }
 
-GV_API void gvThreadPoolSchedule(struct GvThreadPool *pool, struct GvThreadTask *task, GvThreadFN_t fn, void *param) {
+GV_API void gvThreadPoolSchedule(GvThreadPool *pool, GvThreadTask *task, GvThreadFN fn, void *param) {
     task->fn = fn;
     task->param = param;
     task->next = NULL;
@@ -825,7 +830,7 @@ GV_API void gvThreadPoolSchedule(struct GvThreadPool *pool, struct GvThreadTask 
     gvMutexUnlock(&pool->guard);
 }
 
-GV_API void gvThreadPoolDestroy(struct GvThreadPool *pool) {
+GV_API void gvThreadPoolDestroy(GvThreadPool *pool) {
     pool->is_working = 0;
     gvMutexLock(&pool->guard);
     gvCondVarNotifyAll(&pool->supervisor);
@@ -852,5 +857,3 @@ GV_API void gvThreadPoolDestroy(struct GvThreadPool *pool) {
 #ifdef __cplusplus
 }
 #endif
-
-
