@@ -28,26 +28,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -110,9 +110,10 @@
     </Link>
     <PostBuildEvent />
     <PostBuildEvent>
-      <Command>$(VULKAN_SDK)\Bin\glslangvalidator -V $(ProjectDir)$(ProjectName).vert $(ProjectDir)$(ProjectName).frag
-xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vulkan-1.dll
-xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vulkan-1.pdb
+      <Command>cmd /C "cd $(OutputPath) &amp;&amp; $(VULKAN_SDK)\Bin\glslangvalidator -V -e main $(ProjectDir)$(ProjectName).vert -e main $(ProjectDir)$(ProjectName).frag -o"
+xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build32\loader\Debug\vulkan-1.dll $(OutputPath)
+xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build32\loader\Debug\vulkan-1.pdb $(OutputPath)
+xcopy /Y $(ProjectDir)avatar.jpg $(OutputPath)
 </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -136,6 +137,7 @@ xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vu
       <Command>cmd /C "cd $(OutputPath) &amp;&amp; $(VULKAN_SDK)\Bin\glslangvalidator -V -e main $(ProjectDir)$(ProjectName).vert -e main $(ProjectDir)$(ProjectName).frag -o"
 xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vulkan-1.dll $(OutputPath)
 xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vulkan-1.pdb $(OutputPath)
+xcopy /Y $(ProjectDir)avatar.jpg $(OutputPath)
 </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -159,7 +161,9 @@ xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vu
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>$(VULKAN_SDK)\Bin\glslangvalidator -V $(ProjectDir)$(ProjectName).vert $(ProjectDir)$(ProjectName).frag</Command>
+      <Command>cmd /C "cd $(OutputPath) &amp;&amp; $(VULKAN_SDK)\Bin\glslangvalidator -V -e main $(ProjectDir)$(ProjectName).vert -e main $(ProjectDir)$(ProjectName).frag -o"
+xcopy /Y $(ProjectDir)avatar.jpg $(OutputPath)
+</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -182,7 +186,9 @@ xcopy /Y $(VULKAN_SDK)\..\Vulkan-LoaderAndValidationLayers\build\loader\Debug\vu
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>$(VULKAN_SDK)\Bin\glslangvalidator -V $(ProjectDir)$(ProjectName).vert $(ProjectDir)$(ProjectName).frag</Command>
+      <Command>cmd /C "cd $(OutputPath) &amp;&amp; $(VULKAN_SDK)\Bin\glslangvalidator -V -e main $(ProjectDir)$(ProjectName).vert -e main $(ProjectDir)$(ProjectName).frag -o"
+xcopy /Y $(ProjectDir)avatar.jpg $(OutputPath)
+</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -10,8 +10,8 @@ int main(int argc, const char **argv)
 {
     gvSockStartup();
     
-    GvSocket_t listen_sock;
-    GvSocket_t conn_sock;
+    GvSocket listen_sock;
+    GvSocket conn_sock;
 
     char buff[512];
     struct sockaddr_in serv_addr;

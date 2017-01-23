@@ -1,4 +1,5 @@
 
+
 #include <math.h>
 #define MMX_IMPLEMENTATION
 #define MMX_USE_DEGREES
@@ -7,6 +8,8 @@
 
 #define GV_IMPLEMENTATION
 #include <gv.h>
+
+#include <gvVulkan.h>
 
 #include <wtypes.h>
 #include <stdint.h>
@@ -25,12 +28,25 @@
 
 GV_STATIC_ASSERT(NULL == 0);
 
+#ifdef GV_DEBUG
 #define VK_CHECK(...) do { VkResult result = (__VA_ARGS__); if (result != VK_SUCCESS) { __debugbreak(); assert(0 && "vulkan error"); } } while (0)
-
+#else
+#define VK_CHECK(...) do { VkResult res = (__VA_ARGS__); if (res != VK_SUCCESS) { char buff[64] = {0}; OutputDebugStringA(#__VA_ARGS__ ": didn't returned VK_SUCCESS("); itoa(res, buff, 10); OutputDebugStringA(buff); OutputDebugStringA(")"); } } while(0)
+#endif
 
 typedef struct Vertex {
-    float pos[4]; 
-    float col[4]; 
+    union {
+        float pos[4]; 
+        struct {
+            float x, y, z, w;
+        };
+    };
+    union {
+        float col[4]; 
+        struct {
+            float r, g, b, a;
+        };
+    };
 } Vertex;
 
 static const Vertex vertecies[] = {
@@ -85,17 +101,21 @@ typedef struct GvVkDisplay {
     struct GvVkContext *ctx;
     struct GvWindow *window;
     VkSurfaceKHR surface;
-  
+
     VkCommandPool cmd_pool;
     VkCommandBuffer cmd_buff;
     
     uint32_t curr_img;
+
+    uint32_t width;
+    uint32_t height;
 
     VkSwapchainKHR swapchain;
     uint32_t swapchain_image_count;
     VkImage swapchain_images[8];
     VkImageView swapchain_image_views[8];
     VkFormat color_format;
+    VkColorSpaceKHR color_space;
 
     VkFormat depth_format;
     VkImage depth_img;
@@ -112,14 +132,15 @@ typedef struct GvVkLayer {
     struct GvVkContext *ctx;
     struct GvVkDisplay *display;
 
-    VkBuffer ubuff;
-    VkDeviceMemory ubuff_mem;
-
     VkDescriptorSetLayout desc_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
     VkDescriptorPool desc_pool;
+ 
+    VkBuffer ubuff;
+    VkDeviceMemory ubuff_mem;
     VkDescriptorSet desc_set;
+
 
     VkShaderModule vshader;
     VkShaderModule fshader;
@@ -129,13 +150,19 @@ typedef struct GvVkLayer {
 
     VkBuffer ibuff;
     VkDeviceMemory ibuff_mem;
+    
+    VkSampler sampler;
+    VkImage img;
+    VkDeviceMemory img_mem;
+    VkImageView img_view;
 
     VkCommandPool cmd_pool;
     VkCommandBuffer cmd_buff;
     VkFence fence;
 } GvVkLayer;
 
-GV_API void gvVkLayerRender(GvVkLayer *layer, GvWindow *window);
+GV_API void gvVkLayerRender(GvVkLayer *layer);
+GV_API void gvVkDisplayRecreateSwapchain(GvVkDisplay *display, GvVkContext *ctx, GvWindow *window);
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     static PAINTSTRUCT ps;
@@ -176,7 +203,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 
     case WM_PAINT:
         if (window->curr_layer) {
-            gvVkLayerRender(window->curr_layer, window);
+            gvVkLayerRender(window->curr_layer);
         }
         BeginPaint(hwnd, &ps);
         EndPaint(hwnd, &ps);
@@ -185,6 +212,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     case WM_SIZE:
         window->width = LOWORD(lparam);
         window->height = HIWORD(lparam);
+        gvVkDisplayRecreateSwapchain(window->curr_layer->display, window->curr_layer->ctx, window);
         PostMessageA(hwnd, WM_PAINT, 0, 0);
         return 0;
 
@@ -206,14 +234,13 @@ GV_API void gvWindowInit(GvWindow *window, HINSTANCE hinstance, int cmd_show) {
     window->width = 1280;
     window->height = 720;
 
-    window->hwnd = CreateWindowExA(0,
-                               class_name,
-                               "Some window",
-                               WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                               CW_USEDEFAULT, CW_USEDEFAULT, window->width, window->height,
-                               NULL, NULL,
-                               hinstance,
-                               NULL);
+    window->hwnd = CreateWindowExA(0, class_name,
+                                   "Some window",
+                                   WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME,
+                                   CW_USEDEFAULT, CW_USEDEFAULT, window->width, window->height,
+                                   NULL, NULL,
+                                   hinstance,
+                                   NULL);
 
     if (window->hwnd == NULL) {
         MessageBoxA(NULL, "CreateWindowExA() failed", "Error!", MB_OK | MB_ICONERROR);
@@ -323,6 +350,13 @@ GV_API void gvVkContextInit(GvVkContext *ctx, GvVkDisplay *display, GvWindow *wi
 
     static const char *extenstion_names[] = { 
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+        VK_KHR_SURFACE_EXTENSION_NAME,              /* fuck linux compatibility */
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+    };
+    instance_ci.ppEnabledExtensionNames = extenstion_names;
+    instance_ci.enabledExtensionCount = sizeof(extenstion_names) / sizeof(extenstion_names[0]);
+#else
+    static const char *extenstion_names[] = { 
         VK_KHR_SURFACE_EXTENSION_NAME,              /* fuck linux compatibility */
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
     };
@@ -524,53 +558,32 @@ static int pickMemoryType(GvVkContext *ctx, uint32_t typeBits, VkFlags requireme
     return 0;
 }
 
-GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *window) {
-    display->ctx = ctx;
-    display->window = window;
+GV_API void gvVkDisplayRecreateSwapchain(GvVkDisplay *display, GvVkContext *ctx, GvWindow *window) {
+    vkDeviceWaitIdle(ctx->device);
 
-    VkSurfaceFormatKHR surface_formats[8];
-    uint32_t format_count = sizeof(surface_formats) / sizeof(surface_formats[0]);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->physical_device, display->surface, &format_count, surface_formats);
-
-    VkColorSpaceKHR color_space;
-
-    if (format_count == 1 && surface_formats[0].format == VK_FORMAT_UNDEFINED) {
-        display->color_format = VK_FORMAT_B8G8R8A8_UNORM;
-    } else {
-        if (format_count == 0) {
-            MessageBoxA(window->hwnd, "vkGetPhysicalDeviceSurfaceFormatsKHR(): no formats", "Error!", MB_OK | MB_ICONERROR);
-            ExitProcess(8);
-        }
-        display->color_format =  surface_formats[0].format;
-    }
-    color_space =  surface_formats[0].colorSpace;
-
-    VkCommandPoolCreateInfo pool_ci = {0};
-    pool_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    pool_ci.queueFamilyIndex = ctx->present_family;
-    pool_ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-    VK_CHECK(vkCreateCommandPool(ctx->device, &pool_ci, NULL, &display->cmd_pool));
-
-    VkCommandBufferAllocateInfo cmd_buff_ai = {0};
-    cmd_buff_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmd_buff_ai.commandBufferCount = 1;
-    cmd_buff_ai.commandPool = display->cmd_pool;
-    cmd_buff_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-    vkAllocateCommandBuffers(ctx->device, &cmd_buff_ai, &display->cmd_buff);
-
+    VkSwapchainKHR new_swapchain = NULL;
+    VkSwapchainKHR old_swapchain = display->swapchain;
     
-    VkSurfaceCapabilitiesKHR surface_caps = {0};
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx->physical_device, display->surface, &surface_caps);
+    VkSurfaceCapabilitiesKHR surface_caps;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx->physical_device, display->surface, &surface_caps));
+
+    int width = surface_caps.currentExtent.width;
+    int height = surface_caps.currentExtent.height;
 
     VkSwapchainCreateInfoKHR swapchain_ci = {0};
     swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchain_ci.surface = display->surface;
     swapchain_ci.minImageCount = gvMinu(surface_caps.minImageCount + 1, surface_caps.maxImageCount);
     swapchain_ci.imageFormat = display->color_format;
-    swapchain_ci.imageExtent.width = gvClamp(window->width, surface_caps.minImageExtent.width, surface_caps.maxImageExtent.width);
-    swapchain_ci.imageExtent.height = gvClamp(window->height, surface_caps.minImageExtent.height, surface_caps.maxImageExtent.height);
+    swapchain_ci.imageExtent.width = gvClamp(width, surface_caps.minImageExtent.width, surface_caps.maxImageExtent.width);
+    swapchain_ci.imageExtent.height = gvClamp(height, surface_caps.minImageExtent.height, surface_caps.maxImageExtent.height);
+    swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchain_ci.imageArrayLayers = 1;
+    swapchain_ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchain_ci.oldSwapchain = old_swapchain;
+    swapchain_ci.clipped = VK_TRUE;
+    swapchain_ci.imageColorSpace = display->color_space;
+    swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     
     if ((surface_caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
         swapchain_ci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
@@ -578,14 +591,6 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
         swapchain_ci.preTransform = surface_caps.currentTransform;
     }
     
-    swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchain_ci.imageArrayLayers = 1;
-    swapchain_ci.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    swapchain_ci.oldSwapchain = display->swapchain;
-    swapchain_ci.clipped = VK_TRUE;
-    swapchain_ci.imageColorSpace = color_space;
-    swapchain_ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
- 
     if (ctx->graphics_family != ctx->present_family) {
         swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         swapchain_ci.queueFamilyIndexCount = 2;
@@ -596,10 +601,28 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
         swapchain_ci.pQueueFamilyIndices = NULL;
     }
 
-    VK_CHECK(vkCreateSwapchainKHR(ctx->device, &swapchain_ci, NULL, &display->swapchain));
+    VK_CHECK(vkCreateSwapchainKHR(ctx->device, &swapchain_ci, NULL, &new_swapchain));
+
+    uint32_t i;
+    if (old_swapchain) {
+        vkDestroySwapchainKHR(ctx->device, old_swapchain, NULL);
+        
+        vkDestroyImageView(ctx->device, display->depth_img_view, NULL);
+        vkDestroyImage(ctx->device, display->depth_img, NULL);
+        vkFreeMemory(ctx->device, display->depth_img_mem, NULL);
+
+        for (i = 0; i < display->swapchain_image_count; i++) {
+            vkDestroyImageView(ctx->device, display->swapchain_image_views[i], NULL);
+            vkDestroyFramebuffer(ctx->device, display->framebuffers[i], NULL);
+        }
+    }
+
+    display->swapchain = new_swapchain;
+    display->width = width;
+    display->height = height;
 
     display->swapchain_image_count = sizeof(display->swapchain_images) / sizeof(display->swapchain_images[0]);
-    VK_CHECK(vkGetSwapchainImagesKHR(ctx->device, display->swapchain, &display->swapchain_image_count, display->swapchain_images));
+    VK_CHECK(vkGetSwapchainImagesKHR(ctx->device, new_swapchain, &display->swapchain_image_count, &display->swapchain_images));
 
     VkImageViewCreateInfo img_view_ci = {0};
     img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -615,7 +638,6 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
     img_view_ci.subresourceRange.baseArrayLayer = 0;
     img_view_ci.subresourceRange.layerCount = 1;
 
-    uint32_t i;
     for (i = 0; i < display->swapchain_image_count; i++) {
         img_view_ci.image = display->swapchain_images[i];
         VK_CHECK(vkCreateImageView(ctx->device, &img_view_ci, NULL, &display->swapchain_image_views[i]));
@@ -624,9 +646,9 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
     VkImageCreateInfo depth_img_ci = {0};
     depth_img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     depth_img_ci.imageType = VK_IMAGE_TYPE_2D;
-    depth_img_ci.format = display->depth_format = VK_FORMAT_D16_UNORM;
-    depth_img_ci.extent.width = window->width;
-    depth_img_ci.extent.height = window->height;
+    depth_img_ci.format = display->depth_format;
+    depth_img_ci.extent.width = width;
+    depth_img_ci.extent.height = height;
     depth_img_ci.extent.depth = 1;
     depth_img_ci.mipLevels = 1;
     depth_img_ci.arrayLayers = 1;
@@ -634,6 +656,7 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
     depth_img_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depth_img_ci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     depth_img_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
 
     vkCreateImage(ctx->device, &depth_img_ci, NULL, &display->depth_img);
 
@@ -655,7 +678,7 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
     VkImageViewCreateInfo depth_img_view_ci = {0};
     depth_img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     depth_img_view_ci.image = display->depth_img;
-    depth_img_view_ci.format = display->depth_format = VK_FORMAT_D16_UNORM;
+    depth_img_view_ci.format = display->depth_format;
     depth_img_view_ci.components.r = VK_COMPONENT_SWIZZLE_R;
     depth_img_view_ci.components.g = VK_COMPONENT_SWIZZLE_G;
     depth_img_view_ci.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -669,6 +692,60 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
 
     VK_CHECK(vkCreateImageView(ctx->device, &depth_img_view_ci, NULL, &display->depth_img_view));
 
+    VkImageView framebuffer_attachments[2];
+    framebuffer_attachments[1] = display->depth_img_view;
+
+    VkFramebufferCreateInfo framebuffer_ci = {0};
+    framebuffer_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebuffer_ci.width = width;
+    framebuffer_ci.height = height;
+    framebuffer_ci.renderPass = display->render_pass;
+    framebuffer_ci.attachmentCount = 2;
+    framebuffer_ci.pAttachments = framebuffer_attachments;
+    framebuffer_ci.layers = 1;
+
+    for (i = 0; i < display->swapchain_image_count; i++) {
+        framebuffer_attachments[0] = display->swapchain_image_views[i];
+        VK_CHECK(vkCreateFramebuffer(ctx->device, &framebuffer_ci, NULL, &display->framebuffers[i]));
+    }
+    
+}
+
+GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *window) {
+    display->ctx = ctx;
+    display->window = window;
+
+    VkSurfaceFormatKHR surface_formats[8];
+    uint32_t format_count = sizeof(surface_formats) / sizeof(surface_formats[0]);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->physical_device, display->surface, &format_count, surface_formats);
+
+    if (format_count == 1 && surface_formats[0].format == VK_FORMAT_UNDEFINED) {
+        display->color_format = VK_FORMAT_B8G8R8A8_UNORM;
+    } else {
+        if (format_count == 0) {
+            MessageBoxA(window->hwnd, "vkGetPhysicalDeviceSurfaceFormatsKHR(): no formats", "Error!", MB_OK | MB_ICONERROR);
+            ExitProcess(8);
+        }
+        display->color_format =  surface_formats[0].format;
+    }
+    display->color_space = surface_formats[0].colorSpace;
+
+    VkCommandPoolCreateInfo pool_ci = {0};
+    pool_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    pool_ci.queueFamilyIndex = ctx->present_family;
+    pool_ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+    VK_CHECK(vkCreateCommandPool(ctx->device, &pool_ci, NULL, &display->cmd_pool));
+
+    VkCommandBufferAllocateInfo cmd_buff_ai = {0};
+    cmd_buff_ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmd_buff_ai.commandBufferCount = 1;
+    cmd_buff_ai.commandPool = display->cmd_pool;
+    cmd_buff_ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+    vkAllocateCommandBuffers(ctx->device, &cmd_buff_ai, &display->cmd_buff);
+    
+    display->depth_format = VK_FORMAT_D16_UNORM;
 
     VkAttachmentDescription attachments[2] = { {0}, {0} };
     
@@ -714,23 +791,8 @@ GV_API void gvVkDisplayInit(GvVkDisplay *display, GvVkContext *ctx, GvWindow *wi
     render_pass_ci.pSubpasses = &subpass;   
 
     VK_CHECK(vkCreateRenderPass(ctx->device, &render_pass_ci, NULL, &display->render_pass));
-
-    VkImageView framebuffer_attachments[2];
-    framebuffer_attachments[1] = display->depth_img_view;
-
-    VkFramebufferCreateInfo framebuffer_ci = {0};
-    framebuffer_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebuffer_ci.width = window->width;
-    framebuffer_ci.height = window->height;
-    framebuffer_ci.renderPass = display->render_pass;
-    framebuffer_ci.attachmentCount = 2;
-    framebuffer_ci.pAttachments = framebuffer_attachments;
-    framebuffer_ci.layers = 1;
-
-    for (i = 0; i < display->swapchain_image_count; i++) {
-        framebuffer_attachments[0] = display->swapchain_image_views[i];
-        VK_CHECK(vkCreateFramebuffer(ctx->device, &framebuffer_ci, NULL, &display->framebuffers[i]));
-    }
+    
+    gvVkDisplayRecreateSwapchain(display, ctx, window);
 
     VkSemaphoreCreateInfo semaphore_ci = {0};
     semaphore_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -811,16 +873,21 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
 
     VK_CHECK(vkBindBufferMemory(ctx->device, layer->ubuff, layer->ubuff_mem, 0));
 
-    VkDescriptorSetLayoutBinding layout_binding = {0};
-    layout_binding.binding = 0;
-    layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    layout_binding.descriptorCount = 1;
-    layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    VkDescriptorSetLayoutBinding layout_bindings[2] = { {0}, {0} };
+    layout_bindings[0].binding = 0;
+    layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layout_bindings[0].descriptorCount = 1;
+    layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    layout_bindings[1].binding = 1;
+    layout_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    layout_bindings[1].descriptorCount = 1;
+    layout_bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo desc_layout_ci = {0};
     desc_layout_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    desc_layout_ci.bindingCount = 1;
-    desc_layout_ci.pBindings = &layout_binding;
+    desc_layout_ci.bindingCount = 2;
+    desc_layout_ci.pBindings = layout_bindings;
 
     VK_CHECK(vkCreateDescriptorSetLayout(ctx->device, &desc_layout_ci, NULL, &layer->desc_layout));
 
@@ -831,14 +898,16 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
 
     VK_CHECK(vkCreatePipelineLayout(ctx->device, &pipeline_layout_ci, NULL, &layer->pipeline_layout));
     
-    VkDescriptorPoolSize type_count[1];
+    VkDescriptorPoolSize type_count[2];
     type_count[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     type_count[0].descriptorCount = 1;
+    type_count[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    type_count[1].descriptorCount = 1;
     
     VkDescriptorPoolCreateInfo desc_pool_ci = {0};
     desc_pool_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    desc_pool_ci.maxSets = 1;
-    desc_pool_ci.poolSizeCount = 1;
+    desc_pool_ci.maxSets = 2;
+    desc_pool_ci.poolSizeCount = 2;
     desc_pool_ci.pPoolSizes = type_count;
 
     VK_CHECK(vkCreateDescriptorPool(ctx->device, &desc_pool_ci, NULL, &layer->desc_pool));
@@ -849,6 +918,8 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     desc_set_ai.descriptorSetCount = 1;
     desc_set_ai.pSetLayouts = &layer->desc_layout;
     
+    VkDescriptorSet desc_sets[2] = { NULL, NULL };
+
     VK_CHECK(vkAllocateDescriptorSets(ctx->device, &desc_set_ai, &layer->desc_set));
 
     VkDescriptorBufferInfo ubuff_info = {0};
@@ -856,16 +927,34 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     ubuff_info.offset = 0;
     ubuff_info.range = sizeof(float[16]);
 
-    VkWriteDescriptorSet write_desc_set = {0};
-    write_desc_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_desc_set.dstSet = layer->desc_set;
-    write_desc_set.descriptorCount = 1;
-    write_desc_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write_desc_set.pBufferInfo = &ubuff_info;
-    write_desc_set.dstArrayElement = 0;
-    write_desc_set.dstBinding = 0;
+    VkWriteDescriptorSet writes[2] = { {0}, {0} };
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = layer->desc_set;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].pBufferInfo = &ubuff_info;
+    writes[0].dstArrayElement = 0;
+    writes[0].dstBinding = 0;
 
-    vkUpdateDescriptorSets(ctx->device, 1, &write_desc_set, 0, NULL);
+
+
+    VkImageCreateInfo img_ci = {0};
+    img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+
+
+    VkDescriptorImageInfo img_info = {0};
+    img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = layer->desc_set;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[1].dstArrayElement = 0;
+    writes[1].dstBinding = 0;
+    writes[1].pImageInfo = &img_info;
+
+    vkUpdateDescriptorSets(ctx->device, 1, &writes, 0, NULL);
 
     size_t vshader_len;
     const char *vshader_code = stb_filec("vert.spv", &vshader_len);
@@ -996,12 +1085,12 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     vattrs[0].binding = 0;
     vattrs[0].location = 0;
     vattrs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    vattrs[0].offset = &((Vertex *) NULL)->pos[0];
+    vattrs[0].offset = GV_OFFSETOF(Vertex, pos[0]);
 
     vattrs[1].binding = 0;
     vattrs[1].location = 1;
     vattrs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    vattrs[1].offset = &((Vertex *) NULL)->col[0];
+    vattrs[1].offset = GV_OFFSETOF(Vertex, col[0]);
 
     VkPipelineVertexInputStateCreateInfo vi = {0};
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1120,7 +1209,7 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
 
 }
 
-GV_API void gvVkLayerRender(GvVkLayer *layer, GvWindow *window) {
+GV_API void gvVkLayerRender(GvVkLayer *layer) {
     gvVkDisplaySelect(layer->display);
     
     VkCommandBufferBeginInfo cmd_bi = {0};
@@ -1143,8 +1232,8 @@ GV_API void gvVkLayerRender(GvVkLayer *layer, GvWindow *window) {
     render_pass_bi.framebuffer = layer->display->framebuffers[layer->display->curr_img];
     render_pass_bi.renderArea.offset.x = 0.0f;
     render_pass_bi.renderArea.offset.y = 0.0f;
-    render_pass_bi.renderArea.extent.width = window->width;
-    render_pass_bi.renderArea.extent.height = window->height;
+    render_pass_bi.renderArea.extent.width = layer->display->width;
+    render_pass_bi.renderArea.extent.height = layer->display->height;
     render_pass_bi.clearValueCount = 2;
     render_pass_bi.pClearValues = clear_values;
 
@@ -1153,8 +1242,8 @@ GV_API void gvVkLayerRender(GvVkLayer *layer, GvWindow *window) {
     vkCmdBindDescriptorSets(layer->cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, layer->pipeline_layout, 0, 1, &layer->desc_set, 0, NULL);
 
     VkViewport viewport = {0};
-    viewport.width = window->width;
-    viewport.height = window->height;
+    viewport.width = layer->display->width;
+    viewport.height = layer->display->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     viewport.x = 0;
@@ -1162,10 +1251,10 @@ GV_API void gvVkLayerRender(GvVkLayer *layer, GvWindow *window) {
     vkCmdSetViewport(layer->cmd_buff, 0, 1, &viewport);
 
     VkRect2D scissor = {0};
-    scissor.offset.x = 0.0f;
-    scissor.offset.y = 0.0f;
-    scissor.extent.width = window->width;
-    scissor.extent.height = window->height;
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent.width = layer->display->width;
+    scissor.extent.height = layer->display->height;
     vkCmdSetScissor(layer->cmd_buff, 0, 1, &scissor);
 
     vkCmdBindIndexBuffer(layer->cmd_buff, layer->ibuff, 0, VK_INDEX_TYPE_UINT16);

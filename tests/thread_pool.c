@@ -14,7 +14,7 @@ GV_THREAD_FN(taskFn, param) {
 
 int main(int argc, const char **argv) {
     struct GvThreadPool pool;
-    GvThread_t workers[4];
+    GvThread workers[4];
     gvThreadPoolInit(&pool, 4, workers);
 
     struct GvThreadTask tasks[256];

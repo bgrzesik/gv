@@ -19,7 +19,7 @@ int main(int argc, const char **argv)
         return 1;
     }
 
-    GvSocket_t sock = socket(AF_INET, SOCK_STREAM, 0); 
+    GvSocket sock = socket(AF_INET, SOCK_STREAM, 0); 
 
     if (sock == GVSOCK_INVALID) {
         fprintf(stderr, "error: invalid socket\n");
