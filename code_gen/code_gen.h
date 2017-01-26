@@ -47,10 +47,10 @@ struct GvASTMember {
     GvASTID_t type;
     GvASTID_t name;
 
-    gvbool_t struct_prefix;
-    gvbool_t unpack;
-    gvsize_t size;
-    gvsize_t array_size;
+    int struct_prefix;
+    int unpack;
+    size_t size;
+    size_t array_size;
 };
 
 GV_API void gvASTMemberInit(struct GvASTMember *member);
@@ -80,10 +80,10 @@ struct GvParserCtx {
     char *in_filepath;
     FILE *out;
     int indent;
-    gvbool_t parse_only;
+    int parse_only;
 
     GvASTID_t prefix;
-    gvbool_t unpack;
+    int unpack;
 };
 
 struct GvParserError {
@@ -485,7 +485,7 @@ GV_API int gvParserParseAndGen(struct GvParserCtx *ctx, stb_lexer *lex, struct G
 
                     printf("REGISTERED COMPOUND %s\n", setting);
                 } else if (strcmp(domain, "include") == 0) {
-                    gvbool_t last_parse_only = ctx->parse_only;
+                    int last_parse_only = ctx->parse_only;
                     char *last_filepath = ctx->in_filepath;
                     char path[GV__BUFF_SIZE];
                     char include_file[GV__BUFF_SIZE];
@@ -578,7 +578,7 @@ GV_API int gvParserParseAndGen(struct GvParserCtx *ctx, stb_lexer *lex, struct G
 }
 
 GV_API int gvParserParseAndGenFile(struct GvParserCtx *ctx, char *in, struct GvParserError *error) {
-    gvsize_t file_size;
+    size_t file_size;
     char *file_content;
     ctx->in_filepath = in;
     

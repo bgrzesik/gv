@@ -11,5 +11,5 @@ packet Heartbeat {
 
 packet PlayerJoin {
     char name[48];
-    [unpack] vec2 pos;
+    [unpack] Vec2 pos;
 };
