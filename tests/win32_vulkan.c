@@ -9,14 +9,13 @@
 #define GV_IMPLEMENTATION
 #include <gv.h>
 
-#include <gvvk.h>
+#define VK_USE_PLATFORM_WIN32_KHR
+#include <vulkan/vulkan.h>
+#pragma comment(lib, "vulkan-1.lib")
 
 #include <wtypes.h>
 #include <stdint.h>
 
-#define VK_USE_PLATFORM_WIN32_KHR
-#include <vulkan/vulkan.h>
-#pragma comment(lib, "vulkan-1.lib")
 
 #pragma warning(push, 0)
 #define STB_DEFINE
@@ -26,7 +25,6 @@
 #include <stb_easy_font.h>
 #pragma warning(pop)
 
-GV_STATIC_ASSERT(NULL == 0);
 
 #ifdef GV_DEBUG
 #define VK_CHECK(...) do { VkResult result = (__VA_ARGS__); if (result != VK_SUCCESS) { __debugbreak(); assert(0 && "vulkan error"); } } while (0)
@@ -34,6 +32,13 @@ GV_STATIC_ASSERT(NULL == 0);
 #define VK_CHECK(...) do { VkResult res = (__VA_ARGS__); if (res != VK_SUCCESS) { char buff[64] = {0}; OutputDebugStringA(#__VA_ARGS__ ": didn't returned VK_SUCCESS("); itoa(res, buff, 10); OutputDebugStringA(buff); OutputDebugStringA(")"); } } while(0)
 #endif
 
+GV_STATIC_ASSERT((intptr_t) NULL == 0);
+
+/* overide ExitProcess so destructors can work */
+#ifdef ExitProcess
+#undef ExitProcess
+#endif
+#define ExitProcess exit
 
 typedef struct PushConstants {
     float mvp[16];
@@ -62,10 +67,10 @@ typedef struct Vertex {
 } Vertex;
 
 static const Vertex vertecies[] = {
-    { {-2.5f, -2.5f, 0.0f, 1.0f, }, { 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f, } },
-    { { 2.5f, -2.5f, 0.0f, 1.0f, }, { 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f, } },
-    { { 2.5f,  2.5f, 0.0f, 1.0f, }, { 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f, } },
-    { {-2.5f,  2.5f, 0.0f, 1.0f, }, { 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 0.0f, } }
+    { {{-2.5f, -2.5f, 0.0f, 1.0f, }}, {{ 0.0f, 0.0f }}, {{ 0.0f, 0.0f, 1.0f, 1.0f, }} },
+    { {{ 2.5f, -2.5f, 0.0f, 1.0f, }}, {{ 1.0f, 0.0f }}, {{ 0.0f, 1.0f, 0.0f, 1.0f, }} },
+    { {{ 2.5f,  2.5f, 0.0f, 1.0f, }}, {{ 1.0f, 1.0f }}, {{ 1.0f, 0.0f, 0.0f, 1.0f, }} },
+    { {{-2.5f,  2.5f, 0.0f, 1.0f, }}, {{ 0.0f, 1.0f }}, {{ 1.0f, 1.0f, 1.0f, 0.0f, }} }
 };
 
 static const uint16_t indices[] = {
@@ -176,7 +181,6 @@ GV_API void gvVkDisplayRecreateSwapchain(GvVkDisplay *display, GvVkContext *ctx,
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     static PAINTSTRUCT ps;
-    VkSurfaceCapabilitiesKHR surface_caps;
     GvWindow *window = (GvWindow *) GetWindowLongPtr(hwnd, GWLP_USERDATA);
     LPMINMAXINFO minmax;
 
@@ -441,28 +445,28 @@ GV_API void gvVkContextInit(GvVkContext *ctx, GvVkDisplay *display, GvWindow *wi
     uint32_t queue_props_count = sizeof(queue_props) / sizeof(queue_props[0]);
     vkGetPhysicalDeviceQueueFamilyProperties(ctx->physical_device, &queue_props_count, queue_props);
 
-#define __HAS_FLAG(x, flag) (((x) & (flag)) == (flag))
-#define __CHANGE(what, other1, other2, other3, to) (((what) == (other1) || (what) == (other2) || (what) == (other3)) && ((to) != (other1) && (to) != (other2) && (to) != (other3))) 
+#define has_flag(x, flag) (((x) & (flag)) == (flag))
+#define change(what, other1, other2, other3, to) (((what) == (other1) || (what) == (other2) || (what) == (other3)) && ((to) != (other1) && (to) != (other2) && (to) != (other3))) 
      
     for (i = 0; i < queue_props_count; i++) {
         uint32_t qf = queue_props[i].queueFlags;
 
-        if ((gq == -1 || __CHANGE(gq, cq, tq, pq, i)) && __HAS_FLAG(qf, VK_QUEUE_GRAPHICS_BIT))
+        if ((gq == -1 || change(gq, cq, tq, pq, i)) && has_flag(qf, VK_QUEUE_GRAPHICS_BIT))
             gq = i;
 
-        if ((cq == -1 || __CHANGE(cq, gq, tq, pq, i)) && __HAS_FLAG(qf, VK_QUEUE_COMPUTE_BIT))
+        if ((cq == -1 || change(cq, gq, tq, pq, i)) && has_flag(qf, VK_QUEUE_COMPUTE_BIT))
             cq = i;
         
-        if ((tq == -1 || __CHANGE(tq, gq, cq, pq, i)) && __HAS_FLAG(qf, VK_QUEUE_TRANSFER_BIT))
+        if ((tq == -1 || change(tq, gq, cq, pq, i)) && has_flag(qf, VK_QUEUE_TRANSFER_BIT))
             tq = i;
 
         VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(ctx->physical_device, i, display->surface, &present_support));
-        if ((pq == -1 || __CHANGE(pq, gq, cq, tq, i)) && present_support)
+        if ((pq == -1 || change(pq, gq, cq, tq, i)) && present_support)
             pq  = i;
     }
 
-#undef __CHANGE
-#undef __HAS_FLAG
+#undef change
+#undef has_flag
 
     /* I fucking love hard coding */
 
@@ -645,11 +649,11 @@ GV_API void gvVkDisplayRecreateSwapchain(GvVkDisplay *display, GvVkContext *ctx,
     display->height = height;
 
     display->swapchain_image_count = sizeof(display->swapchain_images) / sizeof(display->swapchain_images[0]);
-    VK_CHECK(vkGetSwapchainImagesKHR(ctx->device, new_swapchain, &display->swapchain_image_count, &display->swapchain_images));
+    VK_CHECK(vkGetSwapchainImagesKHR(ctx->device, new_swapchain, &display->swapchain_image_count, display->swapchain_images));
 
     VkImageViewCreateInfo img_view_ci = {0};
     img_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    img_view_ci.viewType = VK_IMAGE_TYPE_2D;
+    img_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
     img_view_ci.format = display->color_format;
     img_view_ci.components.r = VK_COMPONENT_SWIZZLE_R;
     img_view_ci.components.g = VK_COMPONENT_SWIZZLE_G;
@@ -927,7 +931,7 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     VK_CHECK(vkAllocateDescriptorSets(ctx->device, &desc_set_ai, &layer->img_ds));
 
     int width, height, comp;
-    char *img_data = stbi_load("avatar.jpg", &width, &height, &comp, STBI_rgb_alpha);
+    stbi_uc *img_data = stbi_load("avatar.jpg", &width, &height, &comp, STBI_rgb_alpha);
 
     VkImageCreateInfo img_ci = {0};
     img_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1019,7 +1023,7 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     writes[0].dstBinding = 0;
     writes[0].pImageInfo = &img_info;
 
-    vkUpdateDescriptorSets(ctx->device, 1, &writes, 0, NULL);
+    vkUpdateDescriptorSets(ctx->device, 1, writes, 0, NULL);
 
     size_t vshader_len;
     const char *vshader_code = stb_filec("vert.spv", &vshader_len);
@@ -1032,7 +1036,7 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     VkShaderModuleCreateInfo vshader_ci = {0};
     vshader_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     vshader_ci.codeSize = vshader_len;
-    vshader_ci.pCode = vshader_code;
+    vshader_ci.pCode = (uint32_t *) vshader_code;
     
     VK_CHECK(vkCreateShaderModule(ctx->device, &vshader_ci, NULL, &layer->vshader));
 
@@ -1054,7 +1058,7 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     VkShaderModuleCreateInfo fshader_ci = {0};
     fshader_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     fshader_ci.codeSize = fshader_len;
-    fshader_ci.pCode = fshader_code;
+    fshader_ci.pCode = (uint32_t *) fshader_code;
     
     VK_CHECK(vkCreateShaderModule(ctx->device, &fshader_ci, NULL, &layer->fshader));
 
@@ -1135,17 +1139,17 @@ GV_API void gvVkLayerInit(GvVkContext *ctx, GvVkDisplay *display, GvVkLayer *lay
     vattrs[0].binding = 0;
     vattrs[0].location = 0;
     vattrs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    vattrs[0].offset = GV_OFFSETOF(Vertex, pos[0]);
+    vattrs[0].offset = (uint32_t) GV_OFFSETOF(Vertex, pos[0]);
 
     vattrs[1].binding = 0;
     vattrs[1].location = 1;
     vattrs[1].format = VK_FORMAT_R32G32_SFLOAT;
-    vattrs[1].offset = GV_OFFSETOF(Vertex, tex_coord[0]);
+    vattrs[1].offset = (uint32_t) GV_OFFSETOF(Vertex, tex_coord[0]);
 
     vattrs[2].binding = 0;
     vattrs[2].location = 2;
     vattrs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-    vattrs[2].offset = GV_OFFSETOF(Vertex, col[0]);
+    vattrs[2].offset = (uint32_t) GV_OFFSETOF(Vertex, col[0]);
 
     VkPipelineVertexInputStateCreateInfo vi = {0};
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1279,7 +1283,7 @@ GV_API void gvVkLayerRender(GvVkLayer *layer) {
     float hratio = gvMaxf(ha / va, layer->display->width / (float) layer->display->height) * va / 2.0f;
     float vratio = gvMaxf(va / ha, layer->display->height / (float) layer->display->width) * ha / 2.0f;
 
-    xm4_ortho(&pc.mvp, -hratio, hratio, -vratio, vratio);
+    xm4_ortho(pc.mvp, -hratio, hratio, -vratio, vratio);
 #undef ha
 #undef va
 
@@ -1323,11 +1327,7 @@ GV_API void gvVkLayerRender(GvVkLayer *layer) {
     viewport.y = 0;    
     vkCmdSetViewport(layer->cmd_buff, 0, 1, &viewport);
 
-    VkRect2D scissor = {0};
-    scissor.offset.x = 0;
-    scissor.offset.y = 0;
-    scissor.extent.width = layer->display->width;
-    scissor.extent.height = layer->display->height;
+    VkRect2D scissor = { { 0, 0 }, { layer->display->width, layer->display->height } };
     vkCmdSetScissor(layer->cmd_buff, 0, 1, &scissor);
 
     vkCmdBindIndexBuffer(layer->cmd_buff, layer->ibuff, 0, VK_INDEX_TYPE_UINT16);

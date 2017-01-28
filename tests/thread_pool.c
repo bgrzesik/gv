@@ -20,7 +20,7 @@ int main(int argc, const char **argv) {
     struct GvThreadTask tasks[256];
     int i;
     for (i = 0; i < 256; i++) {
-        gvThreadPoolSchedule(&pool, &tasks[i], &taskFn, (void *)(gvintptr_t) i);
+        gvThreadPoolSchedule(&pool, &tasks[i], &taskFn, (void *)(intptr_t) i);
     }
 
     gvThreadPoolDestroy(&pool);

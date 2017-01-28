@@ -27,6 +27,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "win32_vulkan", "win32_vulka
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "winsock_test", "winsock_test.vcxproj", "{AEA670B9-1DFB-42D0-8A14-41B600B6E15B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "win32_vulkan2", "win32_vulkan2.vcxproj", "{696174A9-22FF-4840-A132-B500AFDC94A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -131,6 +133,14 @@ Global
 		{AEA670B9-1DFB-42D0-8A14-41B600B6E15B}.Release|x64.Build.0 = Release|x64
 		{AEA670B9-1DFB-42D0-8A14-41B600B6E15B}.Release|x86.ActiveCfg = Release|Win32
 		{AEA670B9-1DFB-42D0-8A14-41B600B6E15B}.Release|x86.Build.0 = Release|Win32
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Debug|x64.ActiveCfg = Debug|x64
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Debug|x64.Build.0 = Debug|x64
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Debug|x86.ActiveCfg = Debug|Win32
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Debug|x86.Build.0 = Debug|Win32
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Release|x64.ActiveCfg = Release|x64
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Release|x64.Build.0 = Release|x64
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Release|x86.ActiveCfg = Release|Win32
+		{696174A9-22FF-4840-A132-B500AFDC94A2}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{AEDFBC15-710E-42F2-8771-AEA36FC608CC}</ProjectGuid>
+    <ProjectGuid>{696174A9-22FF-4840-A132-B500AFDC94A2}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>test</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.14393.0</WindowsTargetPlatformVersion>
@@ -192,7 +192,7 @@ xcopy /Y $(ProjectDir)avatar.jpg $(OutputPath)
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="win32_vulkan.c" />
+    <ClCompile Include="win32_vulkan2.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="win32_vulkan.frag" />

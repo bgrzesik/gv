@@ -7,19 +7,19 @@
 #include <time.h>
 
 
-#define GV_HEAP_SIZE 8192 * 1024
+#define GV_HEAP_SIZE 8 * 1024 * 1024
 
-static gvs8_t heap[GV_HEAP_SIZE];
+static char heap[GV_HEAP_SIZE];
 
 #define GV_HEAP_START heap[0]
 #define GV_HEAP_END heap[GV_HEAP_SIZE - 1]
 
-void *gv_sbrk(gvsize_t size)
+void *gv_sbrk(size_t size)
 {
-	static volatile const gvs8_t *heap_ptr;
-	const volatile gvs8_t *old_heap_ptr;
+	static volatile const char *heap_ptr;
+	const volatile char *old_heap_ptr;
 
-	static gvbool_t init_sbrk = GV_FALSE;
+	static int init_sbrk = GV_FALSE;
 
 	if (!init_sbrk) {
 		heap_ptr = &GV_HEAP_START;
@@ -41,15 +41,15 @@ void *gv_sbrk(gvsize_t size)
 #define gv_sbrk sbrk
 #endif
 
-static inline gvsize_t gv__word_align(gvsize_t size) 
+static inline size_t gv__word_align(size_t size) 
 {
 	return size + ((sizeof(size_t) - 1) & ~(sizeof(size_t) - 1));
 }
 
 typedef struct gv__chunk {
 	struct gv__chunk    *next, *prev;
-	gvsize_t             size;
-	gvbool_t             free;
+	size_t               size;
+	int                  free;
 	void                *data;
 } gv__chunk_t;                      /* cause it's 'private' */
 
@@ -71,7 +71,7 @@ static void *gv__malloc_base()
 	return b;
 }
 
-static gv__chunk_t *gv__malloc_find(gvsize_t s, gv__chunk_t **heap)
+static gv__chunk_t *gv__malloc_find(size_t s, gv__chunk_t **heap)
 {
 	register gv__chunk_t *c = gv__malloc_base();
 	for(; c && !(c->free && c->size >= s); *heap = c, c = c->next);
@@ -88,7 +88,7 @@ static void gv__malloc_merge_next(gv__chunk_t *c)
 	}
 }
 
-static void gv__malloc_split_next(gv__chunk_t *c, gvsize_t size) 
+static void gv__malloc_split_next(gv__chunk_t *c, size_t size) 
 {
 	gv__chunk_t *newc = (gv__chunk_t*) ((char*) c + size);
 	newc->prev = c;
@@ -103,11 +103,11 @@ static void gv__malloc_split_next(gv__chunk_t *c, gvsize_t size)
 	c->size = size - sizeof(gv__chunk_t);
 }
 
-void *fake_malloc(gvsize_t size)
+void *fake_malloc(size_t size)
 {
 	if (!size) return NULL;
 
-	gvsize_t len = gv__word_align(size + sizeof(gv__chunk_t));
+	size_t len = gv__word_align(size + sizeof(gv__chunk_t));
 	gv__chunk_t *prev = NULL;
 	gv__chunk_t *c = gv__malloc_find(size, &prev);
 
@@ -125,7 +125,7 @@ void *fake_malloc(gvsize_t size)
 		prev->next= newc;
 
 		c = newc;
-	} else if (len + sizeof(gvsize_t) < c->size) {
+	} else if (len + sizeof(size_t) < c->size) {
 		gv__malloc_split_next(c, len);        
 	}
 

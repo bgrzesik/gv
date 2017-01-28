@@ -132,6 +132,10 @@ extern "C" {
 #define GV_ASSERT(...) assert(__VA_ARGS__)
 #endif
 
+#ifdef _MSC_VER
+#define GV_STATIC_ASSERT(...) static_assert(!!(__VA_ARGS__), #__VA_ARGS__)
+#endif
+
 #if defined(GV__C11) && !defined(GV_STATIC_ASSERT)
 #define GV_STATIC_ASSERT(...) _Static_assert(!!(__VA_ARGS__), #__VA_ARGS__)
 #endif
@@ -145,8 +149,8 @@ extern "C" {
 #ifndef GV_STATIC_ASSERT
 #define GV_STATIC_ASSERT(...)                                         \
         GV__DIAG((push), (push))                                      \
-        GV__DIAG((ignored "-Wmissing-declarations"), (disable: 4094))    \
-        struct { int: (!!(__VA_ARGS__)); };                           \
+        GV__DIAG((ignored "-Wmissing-declarations"), (disable: 4094)) \
+        struct { int: (!!(__VA_ARGS__)); }                            \
         GV__DIAG((pop), (pop))
 #endif
 
@@ -171,9 +175,19 @@ extern "C" {
     __declspec(allocate(".CRT$XCU")) void (*fn##_f)(void) = &fn;            \
     __pragma(comment(linker, "/include:" GV__CONSTRUCTOR_PREFIX #fn "_f"))  \
     static void fn(void)
-#elif !defined(GV_CONSTRUCTOR)  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
+#elif !defined(GV_CONSTRUCTOR)
 #define GV_CONSTRUCTOR(fn) static void __attribute__ ((unused, constructor)) fn(void)
-#endif  /* defined(_MSC_VER) && !defined(GV_CONSTRUCTOR) */
+#endif 
+
+#if defined(_MSC_VER) && !defined(GV_DESTRUCTOR)
+int __cdecl atexit(void (__cdecl *func)(void));
+#define GV_DESTRUCTOR(fn)                                                   \
+    static void fn(void);                                                   \
+    GV_CONSTRUCTOR(fn##___constructor) { atexit(&fn); }                     \
+    static void fn(void)
+#elif !defined(GV_DESTRUCTOR)
+#define GV_DESTRUCTOR(fn) static void __attribute__ ((unused, destructor)) fn(void)
+#endif
 
 #ifndef GV_OFFSETOF
 #define GV_OFFSETOF(type, member) (&((type *) (void *) 0)->member)
